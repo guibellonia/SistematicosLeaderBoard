@@ -286,7 +286,7 @@ app.post('/make-server-cc2c4d6e/auth/register', publicMiddleware, async (c) => {
 // 📊 PONTOS - Adicionar ponto (requer autenticação)
 app.post('/make-server-cc2c4d6e/points/add', authMiddleware, async (c) => {
   try {
-    const { reason, points } = await c.req.json()
+    const { reason, points, reasonId } = await c.req.json()
     const currentUser = c.get('currentUser')
     const supabaseUser = c.get('supabaseUser')
     
@@ -329,7 +329,9 @@ app.post('/make-server-cc2c4d6e/points/add', authMiddleware, async (c) => {
     const record = {
       id: crypto.randomUUID(),
       username,
+      userId: user.id, // Adicionar userId para facilitar filtros
       reason,
+      reasonId: reasonId || reason, // Fallback para reason se reasonId não fornecido
       points,
       timestamp: new Date().toISOString(),
       date: new Date().toLocaleDateString('pt-BR'),
@@ -490,6 +492,43 @@ app.get('/make-server-cc2c4d6e/user/:username', authMiddleware, async (c) => {
 
 
 
+// 📅 TEMPORADA - Buscar informações da temporada atual (público)
+app.get('/make-server-cc2c4d6e/season/current', publicMiddleware, async (c) => {
+  try {
+    const currentSeason = await kv.get('season:current') || {
+      number: 1,
+      year: new Date().getFullYear(),
+      title: `Temporada 1 ${new Date().getFullYear()}`,
+      startDate: new Date().toISOString(),
+      status: 'active'
+    }
+    
+    return c.json({ 
+      success: true, 
+      season: currentSeason 
+    })
+  } catch (error) {
+    console.error('Erro ao buscar temporada atual:', error)
+    return c.json({ error: 'Erro interno do servidor' }, 500)
+  }
+})
+
+// 📅 TEMPORADA - Buscar histórico de temporadas de um usuário
+app.get('/make-server-cc2c4d6e/season/history/:username', authMiddleware, async (c) => {
+  try {
+    const username = c.req.param('username')
+    const seasonHistory = await kv.get(`user:${username}:seasons`) || []
+    
+    return c.json({ 
+      success: true, 
+      seasons: seasonHistory 
+    })
+  } catch (error) {
+    console.error('Erro ao buscar histórico de temporadas:', error)
+    return c.json({ error: 'Erro interno do servidor' }, 500)
+  }
+})
+
 // 🔄 REAL-TIME - Status do servidor (público)
 app.get('/make-server-cc2c4d6e/status', publicMiddleware, async (c) => {
   try {
@@ -576,6 +615,117 @@ app.post('/make-server-cc2c4d6e/admin/cleanup-users', publicMiddleware, async (c
     })
   } catch (error) {
     console.error('Erro na limpeza de usuários:', error)
+    return c.json({ error: 'Erro interno do servidor' }, 500)
+  }
+})
+
+// 🏆 BELLONIA - Finalizar temporada e criar nova (apenas para bellonia)
+app.post('/make-server-cc2c4d6e/admin/finalize-season', authMiddleware, async (c) => {
+  try {
+    const currentUser = c.get('currentUser')
+    
+    // Verificar se é o usuário bellonia
+    if (currentUser?.username !== 'bellonia') {
+      return c.json({ error: 'Apenas o usuário bellonia pode finalizar temporadas' }, 403)
+    }
+    
+    console.log('🏆 Iniciando finalização da temporada...')
+    
+    // Buscar dados da temporada atual
+    const currentSeasonData = await kv.get('season:current') || {
+      number: 1,
+      year: new Date().getFullYear(),
+      startDate: new Date().toISOString(),
+      status: 'active'
+    }
+    
+    // Buscar todos os usuários e determinar vencedores
+    const userKeys = await kv.getByPrefix('user:')
+    const users = userKeys
+      .filter(item => !item.key.includes('user:id:'))
+      .map(item => item.value)
+      .sort((a, b) => (b.points || 0) - (a.points || 0))
+    
+    const winners = {
+      first: users[0] || null,
+      second: users[1] || null,
+      third: users[2] || null,
+      totalParticipants: users.length
+    }
+    
+    // Salvar temporada finalizada
+    const finalizedSeason = {
+      ...currentSeasonData,
+      status: 'finished',
+      endDate: new Date().toISOString(),
+      winners: winners,
+      finalLeaderboard: users.slice(0, 10), // Top 10
+      totalUsers: users.length
+    }
+    
+    await kv.set(`season:${currentSeasonData.number}:${currentSeasonData.year}`, finalizedSeason)
+    
+    // Criar nova temporada
+    const newSeasonNumber = currentSeasonData.number + 1
+    const currentYear = new Date().getFullYear()
+    const newSeason = {
+      number: newSeasonNumber,
+      year: currentYear,
+      title: `Temporada ${newSeasonNumber} ${currentYear}`,
+      startDate: new Date().toISOString(),
+      status: 'active',
+      previousSeason: {
+        number: currentSeasonData.number,
+        year: currentSeasonData.year,
+        winners: winners
+      }
+    }
+    
+    await kv.set('season:current', newSeason)
+    
+    // Resetar pontos de temporada de todos os usuários (manter totalPoints)
+    let usersReset = 0
+    for (const user of users) {
+      if (user && user.username) {
+        // Salvar dados da temporada anterior no histórico do usuário
+        const userSeasonHistory = await kv.get(`user:${user.username}:seasons`) || []
+        userSeasonHistory.push({
+          season: currentSeasonData.number,
+          year: currentSeasonData.year,
+          points: user.points || 0,
+          rank: users.findIndex(u => u.username === user.username) + 1,
+          endDate: new Date().toISOString()
+        })
+        await kv.set(`user:${user.username}:seasons`, userSeasonHistory)
+        
+        // Resetar pontos da temporada atual
+        user.points = 0
+        user.rank = 1
+        await kv.set(`user:${user.username}`, user)
+        usersReset++
+      }
+    }
+    
+    // Atualizar leaderboard
+    await updateLeaderboard()
+    
+    // Limpar histórico global da temporada anterior
+    await kv.set('history:global', [])
+    
+    console.log(`🏁 Temporada ${currentSeasonData.number} finalizada e Temporada ${newSeasonNumber} criada!`)
+    console.log(`🥇 Vencedores: 1º ${winners.first?.username}, 2º ${winners.second?.username}, 3º ${winners.third?.username}`)
+    
+    return c.json({
+      success: true,
+      message: `Temporada ${currentSeasonData.number} finalizada! Nova temporada ${newSeasonNumber} iniciada.`,
+      previousSeason: finalizedSeason,
+      newSeason: newSeason,
+      winners: winners,
+      usersReset: usersReset,
+      timestamp: new Date().toISOString()
+    })
+  } catch (error) {
+    console.error('Erro ao finalizar temporada:', error)
     return c.json({ error: 'Erro interno do servidor' }, 500)
   }
 })
@@ -697,40 +847,55 @@ async function checkAchievements(username: string, user: any) {
   try {
     const achievements = [
       // Conquistas de Pontos
-      { id: 'first_point', name: 'Primeiro Passo', description: 'Registrou seu primeiro ponto', icon: '🎯', condition: async () => user.totalPoints >= 1 },
-      { id: 'five_points', name: 'Aquecendo', description: 'Acumulou 5 pontos', icon: '🔥', condition: async () => user.totalPoints >= 5 },
-      { id: 'ten_points', name: 'Dez na Área', description: 'Acumulou 10 pontos', icon: '⚡', condition: async () => user.totalPoints >= 10 },
-      { id: 'twenty_five_points', name: 'Subindo o Nível', description: 'Acumulou 25 pontos', icon: '📈', condition: async () => user.totalPoints >= 25 },
-      { id: 'fifty_points', name: 'Meio Século', description: 'Acumulou 50 pontos', icon: '🎊', condition: async () => user.totalPoints >= 50 },
-      { id: 'hundred_points', name: 'Centena', description: 'Acumulou 100 pontos', icon: '💯', condition: async () => user.totalPoints >= 100 },
-      { id: 'two_hundred_points', name: 'Dobrou a Meta', description: 'Acumulou 200 pontos', icon: '🚀', condition: async () => user.totalPoints >= 200 },
-      { id: 'five_hundred_points', name: 'Quinhentos!', description: 'Acumulou 500 pontos', icon: '🏆', condition: async () => user.totalPoints >= 500 },
-      { id: 'thousand_points', name: 'Milhar', description: 'Acumulou 1000 pontos', icon: '👑', condition: async () => user.totalPoints >= 1000 },
+      { id: 'first_point', name: 'Primeiro Passo', description: 'Registrou seu primeiro ponto', icon: '🎯', condition: () => (user.totalPoints || 0) >= 1 },
+      { id: 'five_points', name: 'Aquecendo', description: 'Acumulou 5 pontos', icon: '🔥', condition: () => (user.totalPoints || 0) >= 5 },
+      { id: 'ten_points', name: 'Dez na Área', description: 'Acumulou 10 pontos', icon: '⚡', condition: () => (user.totalPoints || 0) >= 10 },
+      { id: 'twenty_five_points', name: 'Subindo o Nível', description: 'Acumulou 25 pontos', icon: '📈', condition: () => (user.totalPoints || 0) >= 25 },
+      { id: 'fifty_points', name: 'Meio Século', description: 'Acumulou 50 pontos', icon: '🎊', condition: () => (user.totalPoints || 0) >= 50 },
+      { id: 'hundred_points', name: 'Centena', description: 'Acumulou 100 pontos', icon: '💯', condition: () => (user.totalPoints || 0) >= 100 },
+      { id: 'two_hundred_points', name: 'Dobrou a Meta', description: 'Acumulou 200 pontos', icon: '🚀', condition: () => (user.totalPoints || 0) >= 200 },
+      { id: 'five_hundred_points', name: 'Quinhentos!', description: 'Acumulou 500 pontos', icon: '🏆', condition: () => (user.totalPoints || 0) >= 500 },
+      { id: 'thousand_points', name: 'Milhar', description: 'Acumulou 1000 pontos', icon: '👑', condition: () => (user.totalPoints || 0) >= 1000 },
       
       // Conquistas de Ranking
-      { id: 'top_10', name: 'Top 10', description: 'Ficou entre os 10 primeiros', icon: '🔟', condition: async () => user.rank <= 10 },
-      { id: 'top_5', name: 'Top 5', description: 'Ficou entre os 5 primeiros', icon: '✋', condition: async () => user.rank <= 5 },
-      { id: 'top_3', name: 'Pódio', description: 'Ficou entre os 3 primeiros', icon: '🥉', condition: async () => user.rank <= 3 },
-      { id: 'second_place', name: 'Vice-Campeão', description: 'Alcançou o 2º lugar', icon: '🥈', condition: async () => user.rank === 2 },
-      { id: 'leader', name: 'Campeão', description: 'Alcançou o 1º lugar', icon: '🥇', condition: async () => user.rank === 1 },
+      { id: 'top_10', name: 'Top 10', description: 'Ficou entre os 10 primeiros', icon: '🔟', condition: () => (user.rank || 999) <= 10 },
+      { id: 'top_5', name: 'Top 5', description: 'Ficou entre os 5 primeiros', icon: '✋', condition: () => (user.rank || 999) <= 5 },
+      { id: 'top_3', name: 'Pódio', description: 'Ficou entre os 3 primeiros', icon: '🥉', condition: () => (user.rank || 999) <= 3 },
+      { id: 'second_place', name: 'Vice-Campeão', description: 'Alcançou o 2º lugar', icon: '🥈', condition: () => (user.rank || 999) === 2 },
+      { id: 'leader', name: 'Campeão', description: 'Alcançou o 1º lugar', icon: '🥇', condition: () => (user.rank || 999) === 1 },
       
       // Conquistas Sociais
-      { id: 'first_friend', name: 'Sociável', description: 'Fez seu primeiro amigo', icon: '👥', condition: async () => (user.friends?.length || 0) >= 1 },
-      { id: 'five_friends', name: 'Popular', description: 'Tem 5 amigos', icon: '🎉', condition: async () => (user.friends?.length || 0) >= 5 },
-      { id: 'ten_friends', name: 'Networking Master', description: 'Tem 10 amigos', icon: '🌟', condition: async () => (user.friends?.length || 0) >= 10 },
+      { id: 'first_friend', name: 'Sociável', description: 'Fez seu primeiro amigo', icon: '👥', condition: () => (user.friends?.length || 0) >= 1 },
+      { id: 'five_friends', name: 'Popular', description: 'Tem 5 amigos', icon: '🎉', condition: () => (user.friends?.length || 0) >= 5 },
+      { id: 'ten_friends', name: 'Networking Master', description: 'Tem 10 amigos', icon: '🌟', condition: () => (user.friends?.length || 0) >= 10 },
       
       // Conquistas Especiais
-      { id: 'early_adopter', name: 'Early Adopter', description: 'Um dos primeiros usuários', icon: '🚀', condition: async () => user.id && new Date(user.createdAt) < new Date('2025-01-01') },
+      { id: 'early_adopter', name: 'Early Adopter', description: 'Um dos primeiros usuários', icon: '🚀', condition: () => user.id && user.createdAt && new Date(user.createdAt) < new Date('2025-01-01') },
       { id: 'consistent_player', name: 'Consistente', description: 'Registrou pontos por 7 dias seguidos', icon: '📅', condition: async () => await checkConsistency(username) },
       { id: 'night_owl', name: 'Coruja', description: 'Registrou pontos depois da meia-noite', icon: '🦉', condition: async () => await checkNightActivity(username) },
       { id: 'morning_bird', name: 'Madrugador', description: 'Registrou pontos antes das 6h', icon: '🌅', condition: async () => await checkMorningActivity(username) },
       
       // Conquistas Temáticas
       { id: 'henaldo_hunter', name: 'Caçador de Henaldo', description: 'Xingou o Henaldo 10 vezes', icon: '🎯', condition: async () => await checkSpecificReason(username, 'xingar-henaldo', 10) },
+      { id: 'henaldo_novice', name: 'Aprendiz de Henaldo', description: 'Xingou o Henaldo pela primeira vez', icon: '😤', condition: async () => await checkSpecificReason(username, 'xingar-henaldo', 1) },
       { id: 'perfect_student', name: 'Aluno Exemplar', description: 'Tirou total em avaliação 5 vezes', icon: '📚', condition: async () => await checkSpecificReason(username, 'avaliacao-total', 5) },
+      { id: 'first_perfect', name: 'Primeira Perfeição', description: 'Tirou sua primeira nota total', icon: '⭐', condition: async () => await checkSpecificReason(username, 'avaliacao-total', 1) },
       { id: 'helper', name: 'Colaborativo', description: 'Ajudou colegas 15 vezes', icon: '🤝', condition: async () => await checkSpecificReason(username, 'ajudar-colega', 15) },
+      { id: 'first_helper', name: 'Primeira Ajuda', description: 'Ajudou um colega pela primeira vez', icon: '🤲', condition: async () => await checkSpecificReason(username, 'ajudar-colega', 1) },
       { id: 'expo_winner', name: 'Campeão da ExpoTech', description: 'Ganhou primeiro lugar na ExpoTech', icon: '🏆', condition: async () => await checkSpecificReason(username, 'primeiro-expotech', 1) },
       { id: 'expo_runner_up', name: 'Vice na ExpoTech', description: 'Ficou em segundo na ExpoTech', icon: '🥈', condition: async () => await checkSpecificReason(username, 'segundo-expotech', 1) },
+      { id: 'expo_participant', name: 'Participante da ExpoTech', description: 'Participou da ExpoTech', icon: '🎪', condition: async () => await checkSpecificReason(username, 'participar-expotech', 1) },
+      
+      // Conquistas de Produtividade
+      { id: 'bug_hunter', name: 'Caçador de Bugs', description: 'Corrigiu 10 bugs críticos', icon: '🐛', condition: async () => await checkSpecificReason(username, 'bug-fix', 10) },
+      { id: 'first_bug_fix', name: 'Primeiro Bug Morto', description: 'Corrigiu seu primeiro bug', icon: '🔧', condition: async () => await checkSpecificReason(username, 'bug-fix', 1) },
+      { id: 'feature_creator', name: 'Criador de Features', description: 'Implementou 5 novas funcionalidades', icon: '🚀', condition: async () => await checkSpecificReason(username, 'feature-nova', 5) },
+      { id: 'optimizer', name: 'Otimizador', description: 'Otimizou performance 5 vezes', icon: '⚡', condition: async () => await checkSpecificReason(username, 'otimizacao', 5) },
+      
+      // Conquistas de Frequência
+      { id: 'punctual_week', name: 'Semana Pontual', description: 'Chegou pontualmente por uma semana', icon: '⏰', condition: async () => await checkSpecificReason(username, 'chegada-pontual', 1) },
+      { id: 'cleaner', name: 'Faxineiro', description: 'Limpou o laboratório 5 vezes', icon: '🧹', condition: async () => await checkSpecificReason(username, 'limpar-lab', 5) },
+      { id: 'meme_master', name: 'Mestre dos Memes', description: 'Fez 10 memes engraçados', icon: '😂', condition: async () => await checkSpecificReason(username, 'meme-engracado', 10) },
     ]
 
     const userAchievements = user.achievements || []
@@ -743,11 +908,18 @@ async function checkAchievements(username: string, user: any) {
       const hasAchievement = userAchievements.find(a => a.id === achievement.id)
       if (!hasAchievement) {
         try {
-          const conditionMet = await achievement.condition()
+          const conditionMet = typeof achievement.condition === 'function' 
+            ? await achievement.condition() 
+            : achievement.condition
+            
           console.log(`🎯 Testando ${achievement.name} (${achievement.id}): ${conditionMet}`)
+          
           if (conditionMet) {
             const newAchievement = {
-              ...achievement,
+              id: achievement.id,
+              name: achievement.name,
+              description: achievement.description,
+              icon: achievement.icon,
               unlockedAt: new Date().toISOString()
             }
             userAchievements.push(newAchievement)
@@ -788,12 +960,20 @@ async function checkMorningActivity(username: string): Promise<boolean> {
   return false
 }
 
-async function checkSpecificReason(username: string, reason: string, count: number): Promise<boolean> {
+async function checkSpecificReason(username: string, reasonId: string, count: number): Promise<boolean> {
   try {
     const history = await kv.get(`history:${username}`) || []
-    const reasonCount = history.filter(record => record.reason === reason).length
+    // Contar tanto por reason (novo) quanto por reasonId para compatibilidade
+    const reasonCount = history.filter(record => 
+      record.reason === reasonId || 
+      record.reasonId === reasonId ||
+      (record.reason && record.reason.includes(reasonId))
+    ).length
+    
+    console.log(`🔍 Verificando ${reasonId} para ${username}: ${reasonCount}/${count}`)
     return reasonCount >= count
-  } catch {
+  } catch (error) {
+    console.error(`❌ Erro ao verificar reason ${reasonId} para ${username}:`, error)
     return false
   }
 }

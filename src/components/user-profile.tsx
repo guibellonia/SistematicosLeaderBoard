@@ -10,6 +10,9 @@ import { Separator } from './ui/separator';
 import { 
   ArrowLeft,
   Trophy,
+  Target,
+  Medal,
+  Zap,
   Star,
   Heart,
   Coffee,
@@ -35,11 +38,9 @@ import {
   BookOpen,
   Music,
   Gamepad2,
-  Infinity,
-  Target,
-  Medal,
-  Zap
+  Infinity
 } from 'lucide-react';
+import { calculateAchievements, getUserTitle, calculateEarnedTitles, getAllTitles } from './achievements-definitions';
 
 interface UserProfileProps {
   targetUser: string;
@@ -81,8 +82,8 @@ export const UserProfile: React.FC<UserProfileProps> = ({ targetUser, onBackToOw
 
 
 
-  // Calculate achievements dynamically
-  const calculateAchievements = () => {
+  // Calculate achievements using unified definitions
+  const getUserAchievements = () => {
     if (!user?.id || !pointRecords) return [];
 
     const userRecords = pointRecords.filter(record => record?.userId === user.id);
@@ -90,495 +91,13 @@ export const UserProfile: React.FC<UserProfileProps> = ({ targetUser, onBackToOw
     const leaderboard = getLeaderboard() || [];
     const userRank = leaderboard.findIndex(u => u?.id === user.id) + 1;
 
-    const achievementDefinitions = [
-      {
-        id: '1',
-        name: 'Primeiro Ponto',
-        description: 'Registre seu primeiro ponto no sistema',
-        icon: Target,
-        condition: () => userRecords.length >= 1
-      },
-      {
-        id: '2',
-        name: 'Iniciante',
-        description: 'Acumule 10 pontos',
-        icon: Medal,
-        condition: () => totalPoints >= 10
-      },
-      {
-        id: '3',
-        name: 'Entusiasta',
-        description: 'Acumule 100 pontos',
-        icon: Zap,
-        condition: () => totalPoints >= 100
-      },
-      {
-        id: '4',
-        name: 'Veterano',
-        description: 'Acumule 500 pontos',
-        icon: Star,
-        condition: () => totalPoints >= 500
-      },
-      {
-        id: '5',
-        name: 'Dedicado',
-        description: 'Registre pontos por 7 dias consecutivos',
-        icon: Heart,
-        condition: () => {
-          if (userRecords.length < 7) return false;
-          
-          const sortedRecords = userRecords
-            .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
-          
-          let consecutiveDays = 1;
-          let maxConsecutive = 1;
-          
-          for (let i = 1; i < sortedRecords.length; i++) {
-            const currentDate = new Date(sortedRecords[i].timestamp);
-            const previousDate = new Date(sortedRecords[i - 1].timestamp);
-            
-            const dayDiff = Math.floor((currentDate.getTime() - previousDate.getTime()) / (1000 * 60 * 60 * 24));
-            
-            if (dayDiff === 1) {
-              consecutiveDays++;
-              maxConsecutive = Math.max(maxConsecutive, consecutiveDays);
-            } else if (dayDiff > 1) {
-              consecutiveDays = 1;
-            }
-          }
-          
-          return maxConsecutive >= 7;
-        }
-      },
-      {
-        id: '6',
-        name: 'Cafeínado',
-        description: 'Registre pontos relacionados a café 20 vezes',
-        icon: Coffee,
-        condition: () => {
-          const coffeeRecords = userRecords.filter(r => 
-            r?.reason?.toLowerCase().includes('café') || 
-            r?.reason?.toLowerCase().includes('coffee')
-          );
-          return coffeeRecords.length >= 20;
-        }
-      },
-      {
-        id: '7',
-        name: 'Destruidor',
-        description: 'Registre pontos relacionados a "xingar" 50 vezes',
-        icon: Skull,
-        condition: () => {
-          const angerRecords = userRecords.filter(r => 
-            r?.reason?.toLowerCase().includes('xingar') || 
-            r?.reason?.toLowerCase().includes('brigar')
-          );
-          return angerRecords.length >= 50;
-        }
-      },
-      {
-        id: '8',
-        name: 'Gênio',
-        description: 'Registre pontos relacionados a estudos ou conhecimento 30 vezes',
-        icon: Brain,
-        condition: () => {
-          const studyRecords = userRecords.filter(r => 
-            r?.reason?.toLowerCase().includes('estudar') || 
-            r?.reason?.toLowerCase().includes('aprender') ||
-            r?.reason?.toLowerCase().includes('total') ||
-            r?.reason?.toLowerCase().includes('avaliação')
-          );
-          return studyRecords.length >= 30;
-        }
-      },
-      {
-        id: '9',
-        name: 'Explorador Espacial',
-        description: 'Acumule 1000 pontos',
-        icon: Rocket,
-        condition: () => totalPoints >= 1000
-      },
-      {
-        id: '10',
-        name: 'Guardião',
-        description: 'Ajude outros usuários registrando pontos relacionados a ajuda 15 vezes',
-        icon: Shield,
-        condition: () => {
-          const helpRecords = userRecords.filter(r => 
-            r?.reason?.toLowerCase().includes('ajudar') || 
-            r?.reason?.toLowerCase().includes('auxiliar') ||
-            r?.reason?.toLowerCase().includes('suporte')
-          );
-          return helpRecords.length >= 15;
-        }
-      },
-      {
-        id: '11',
-        name: 'Guerreiro',
-        description: 'Supere desafios registrando pontos relacionados a vitórias 25 vezes',
-        icon: Sword,
-        condition: () => {
-          const victoryRecords = userRecords.filter(r => 
-            r?.reason?.toLowerCase().includes('vencer') || 
-            r?.reason?.toLowerCase().includes('ganhar') ||
-            r?.reason?.toLowerCase().includes('vitória') ||
-            r?.reason?.toLowerCase().includes('sucesso')
-          );
-          return victoryRecords.length >= 25;
-        }
-      },
-      {
-        id: '12',
-        name: 'Diamante',
-        description: 'Acumule 2500 pontos',
-        icon: Diamond,
-        condition: () => totalPoints >= 2500
-      },
-      {
-        id: '13',
-        name: 'Noturno',
-        description: 'Registre pontos durante a madrugada (00h às 06h) 10 vezes',
-        icon: Moon,
-        condition: () => {
-          const nightRecords = userRecords.filter(r => {
-            const hour = new Date(r.timestamp).getHours();
-            return hour >= 0 && hour < 6;
-          });
-          return nightRecords.length >= 10;
-        }
-      },
-      {
-        id: '14',
-        name: 'Matinal',
-        description: 'Registre pontos de manhã cedo (05h às 08h) 15 vezes',
-        icon: Sun,
-        condition: () => {
-          const morningRecords = userRecords.filter(r => {
-            const hour = new Date(r.timestamp).getHours();
-            return hour >= 5 && hour < 8;
-          });
-          return morningRecords.length >= 15;
-        }
-      },
-      {
-        id: '15',
-        name: 'Montanhista',
-        description: 'Alcance o top 5 do leaderboard',
-        icon: Mountain,
-        condition: () => userRank > 0 && userRank <= 5
-      },
-      {
-        id: '16',
-        name: 'Em Chamas',
-        description: 'Registre mais de 50 pontos em um único dia',
-        icon: Flame,
-        condition: () => {
-          const recordsByDate = {};
-          userRecords.forEach(record => {
-            const date = new Date(record.timestamp).toDateString();
-            recordsByDate[date] = (recordsByDate[date] || 0) + (record.points || 1);
-          });
-          
-          return Object.values(recordsByDate).some(points => points > 50);
-        }
-      },
-      {
-        id: '17',
-        name: 'Colecionador de Gemas',
-        description: 'Acumule 5000 pontos',
-        icon: Gem,
-        condition: () => totalPoints >= 5000
-      },
-      {
-        id: '18',
-        name: 'Brilhante',
-        description: 'Mantenha uma média de mais de 10 pontos por registro',
-        icon: Sparkles,
-        condition: () => {
-          if (userRecords.length === 0) return false;
-          const totalRecordPoints = userRecords.reduce((sum, record) => sum + (record.points || 1), 0);
-          return (totalRecordPoints / userRecords.length) > 10;
-        }
-      },
-      {
-        id: '19',
-        name: 'Raio',
-        description: 'Registre 5 pontos em menos de 1 hora',
-        icon: Bolt,
-        condition: () => {
-          const sortedRecords = userRecords
-            .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
-          
-          for (let i = 0; i <= sortedRecords.length - 5; i++) {
-            const firstTime = new Date(sortedRecords[i].timestamp).getTime();
-            const fifthTime = new Date(sortedRecords[i + 4].timestamp).getTime();
-            
-            if ((fifthTime - firstTime) < 3600000) { // 1 hora em ms
-              return true;
-            }
-          }
-          return false;
-        }
-      },
-      {
-        id: '20',
-        name: 'Majestade',
-        description: 'Alcance o 1º lugar no leaderboard',
-        icon: Crown,
-        condition: () => userRank === 1
-      },
-      {
-        id: '21',
-        name: 'Mestre dos Pontos',
-        description: 'Acumule 10000 pontos',
-        icon: Award,
-        condition: () => totalPoints >= 10000
-      },
-      {
-        id: '22',
-        name: 'Presenteador',
-        description: 'Registre pontos relacionados a dar presentes ou ajudar 20 vezes',
-        icon: Gift,
-        condition: () => {
-          const giftRecords = userRecords.filter(r => 
-            r?.reason?.toLowerCase().includes('presente') || 
-            r?.reason?.toLowerCase().includes('dar') ||
-            r?.reason?.toLowerCase().includes('ajudar')
-          );
-          return giftRecords.length >= 20;
-        }
-      },
-      {
-        id: '23',
-        name: 'Sempre Feliz',
-        description: 'Registre pontos relacionados a felicidade ou alegria 30 vezes',
-        icon: Smile,
-        condition: () => {
-          const happyRecords = userRecords.filter(r => 
-            r?.reason?.toLowerCase().includes('feliz') || 
-            r?.reason?.toLowerCase().includes('alegre') ||
-            r?.reason?.toLowerCase().includes('sorriso') ||
-            r?.reason?.toLowerCase().includes('diversão')
-          );
-          return happyRecords.length >= 30;
-        }
-      },
-      {
-        id: '24',
-        name: 'Temperamental',
-        description: 'Registre pontos relacionados a raiva ou frustração 40 vezes',
-        icon: Angry,
-        condition: () => {
-          const angryRecords = userRecords.filter(r => 
-            r?.reason?.toLowerCase().includes('raiva') || 
-            r?.reason?.toLowerCase().includes('irritado') ||
-            r?.reason?.toLowerCase().includes('frustrado') ||
-            r?.reason?.toLowerCase().includes('bravo')
-          );
-          return angryRecords.length >= 40;
-        }
-      },
-      {
-        id: '25',
-        name: 'Centurião',
-        description: 'Faça 100 registros de pontos',
-        icon: Target,
-        condition: () => userRecords.length >= 100
-      },
-      {
-        id: '26',
-        name: 'Conquistador Universal',
-        description: 'Desbloqueie 20 conquistas diferentes',
-        icon: Trophy,
-        condition: () => false // Will be calculated after processing other achievements
-      },
-      {
-        id: '27',
-        name: 'Imortal',
-        description: 'Mantenha uma sequência de 30 dias registrando pontos',
-        icon: Infinity,
-        condition: () => {
-          if (userRecords.length < 30) return false;
-          
-          const sortedRecords = userRecords
-            .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
-          
-          let consecutiveDays = 1;
-          let maxConsecutive = 1;
-          
-          for (let i = 1; i < sortedRecords.length; i++) {
-            const currentDate = new Date(sortedRecords[i].timestamp);
-            const previousDate = new Date(sortedRecords[i - 1].timestamp);
-            
-            const dayDiff = Math.floor((currentDate.getTime() - previousDate.getTime()) / (1000 * 60 * 60 * 24));
-            
-            if (dayDiff === 1) {
-              consecutiveDays++;
-              maxConsecutive = Math.max(maxConsecutive, consecutiveDays);
-            } else if (dayDiff > 1) {
-              consecutiveDays = 1;
-            }
-          }
-          
-          return maxConsecutive >= 30;
-        }
-      },
-      {
-        id: '28',
-        name: 'Estudioso',
-        description: 'Registre pontos relacionados a leitura ou estudo 25 vezes',
-        icon: BookOpen,
-        condition: () => {
-          const studyRecords = userRecords.filter(r => 
-            r?.reason?.toLowerCase().includes('ler') || 
-            r?.reason?.toLowerCase().includes('livro') ||
-            r?.reason?.toLowerCase().includes('estudar') ||
-            r?.reason?.toLowerCase().includes('pesquisar')
-          );
-          return studyRecords.length >= 25;
-        }
-      },
-      {
-        id: '29',
-        name: 'Melômano',
-        description: 'Registre pontos relacionados a música 30 vezes',
-        icon: Music,
-        condition: () => {
-          const musicRecords = userRecords.filter(r => 
-            r?.reason?.toLowerCase().includes('música') || 
-            r?.reason?.toLowerCase().includes('cantar') ||
-            r?.reason?.toLowerCase().includes('tocar') ||
-            r?.reason?.toLowerCase().includes('som')
-          );
-          return musicRecords.length >= 30;
-        }
-      },
-      {
-        id: '30',
-        name: 'Idealizador',
-        description: 'Registre pontos relacionados a ideias ou criatividade 40 vezes',
-        icon: Lightbulb,
-        condition: () => {
-          const ideaRecords = userRecords.filter(r => 
-            r?.reason?.toLowerCase().includes('ideia') || 
-            r?.reason?.toLowerCase().includes('criar') ||
-            r?.reason?.toLowerCase().includes('inventar') ||
-            r?.reason?.toLowerCase().includes('inovar')
-          );
-          return ideaRecords.length >= 40;
-        }
-      },
-      {
-        id: '31',
-        name: 'Motivador',
-        description: 'Registre pontos relacionados a motivar outros 25 vezes',
-        icon: Gift,
-        condition: () => {
-          const motivateRecords = userRecords.filter(r => 
-            r?.reason?.toLowerCase().includes('motivar') || 
-            r?.reason?.toLowerCase().includes('encorajar') ||
-            r?.reason?.toLowerCase().includes('inspirar')
-          );
-          return motivateRecords.length >= 25;
-        }
-      },
-      {
-        id: '32',
-        name: 'Gamer',
-        description: 'Registre pontos relacionados a jogos 35 vezes',
-        icon: Gamepad2,
-        condition: () => {
-          const gameRecords = userRecords.filter(r => 
-            r?.reason?.toLowerCase().includes('jogo') || 
-            r?.reason?.toLowerCase().includes('game') ||
-            r?.reason?.toLowerCase().includes('jogar') ||
-            r?.reason?.toLowerCase().includes('gaming')
-          );
-          return gameRecords.length >= 35;
-        }
-      },
-      {
-        id: '33',
-        name: 'Explorador',
-        description: 'Registre pontos usando 20 motivos diferentes',
-        icon: Rocket,
-        condition: () => {
-          const uniqueReasons = new Set(userRecords.map(r => r?.reason?.toLowerCase()).filter(Boolean));
-          return uniqueReasons.size >= 20;
-        }
-      },
-      {
-        id: '34',
-        name: 'Campeão Supremo',
-        description: 'Seja #1 no leaderboard por um período significativo',
-        icon: Trophy,
-        condition: () => {
-          return userRank === 1 && totalPoints >= 3000;
-        }
-      },
-      {
-        id: '35',
-        name: 'Lendário',
-        description: 'Acumule 20000 pontos totais (você transcendeu)',
-        icon: Gem,
-        condition: () => totalPoints >= 20000
-      }
-    ];
-
-    const processedAchievements = achievementDefinitions.map(achievement => {
-      const unlocked = achievement.condition();
-      let unlockedDate = null;
-      
-      if (unlocked && userRecords.length > 0) {
-        if (achievement.id === '1') {
-          unlockedDate = userRecords[0]?.timestamp;
-        } else {
-          unlockedDate = userRecords[userRecords.length - 1]?.timestamp;
-        }
-      }
-      
-      return {
-        ...achievement,
-        unlocked,
-        date: unlockedDate ? new Date(unlockedDate).toLocaleDateString('pt-BR') : null
-      };
-    });
-
-    // Update "Conquistador Universal" achievement
-    const conquistadorUniversal = processedAchievements.find(a => a.id === '26');
-    if (conquistadorUniversal) {
-      const unlockedCount = processedAchievements.filter(a => a.unlocked && a.id !== '26').length;
-      conquistadorUniversal.unlocked = unlockedCount >= 20;
-    }
-
-    return processedAchievements;
+    return calculateAchievements(userRecords, totalPoints, userRank);
   };
 
-  const achievements = calculateAchievements();
+  const achievements = getUserAchievements();
 
-  // Calculate user title based on achievements
-  const getUserTitle = () => {
-    const unlockedAchievements = achievements.filter(a => a.unlocked).length;
-    const totalPoints = user?.points || 0;
-
-    if (unlockedAchievements >= 30 || totalPoints >= 15000) {
-      return { title: '🏆 Lendário', color: 'bg-gradient-to-r from-yellow-400 to-orange-500' };
-    } else if (unlockedAchievements >= 25 || totalPoints >= 10000) {
-      return { title: '💎 Mestre', color: 'bg-gradient-to-r from-purple-500 to-pink-500' };
-    } else if (unlockedAchievements >= 20 || totalPoints >= 5000) {
-      return { title: '👑 Épico', color: 'bg-gradient-to-r from-blue-500 to-purple-500' };
-    } else if (unlockedAchievements >= 15 || totalPoints >= 2500) {
-      return { title: '⭐ Avançado', color: 'bg-gradient-to-r from-green-500 to-blue-500' };
-    } else if (unlockedAchievements >= 10 || totalPoints >= 1000) {
-      return { title: '🔥 Experiente', color: 'bg-gradient-to-r from-orange-500 to-red-500' };
-    } else if (unlockedAchievements >= 5 || totalPoints >= 100) {
-      return { title: '🚀 Intermediário', color: 'bg-gradient-to-r from-cyan-500 to-blue-500' };
-    } else {
-      return { title: '🌱 Iniciante', color: 'bg-gradient-to-r from-green-400 to-green-600' };
-    }
-  };
-
-  const userTitle = getUserTitle();
+  // Calculate user title using unified functions
+  const userTitle = getUserTitle(achievements, undefined, false);
 
   if (isLoading) {
     return (
@@ -753,6 +272,48 @@ export const UserProfile: React.FC<UserProfileProps> = ({ targetUser, onBackToOw
         </CardContent>
       </Card>
 
+      {/* Seção de Títulos Conquistados */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Crown className="h-5 w-5" />
+            Títulos Conquistados
+          </CardTitle>
+          <CardDescription>
+            Todos os títulos que {user.username} desbloqueou
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {calculateEarnedTitles(achievements).map((titleInfo) => (
+              <div
+                key={titleInfo.id}
+                className={`p-4 rounded-lg border transition-all hover:scale-105 ${titleInfo.color} text-white shadow-lg`}
+              >
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="font-semibold">{titleInfo.title}</h4>
+                    <p className="text-sm opacity-90">{titleInfo.description}</p>
+                  </div>
+                  {titleInfo.id === getAllTitles().find(t => userTitle.title === t.title)?.id && (
+                    <Badge className="bg-white/20 text-white border-white/20">
+                      Atual
+                    </Badge>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+          
+          {calculateEarnedTitles(achievements).length === 0 && (
+            <div className="text-center py-8 text-muted-foreground">
+              <Crown className="h-12 w-12 mx-auto mb-4 opacity-50" />
+              <p>Nenhum título conquistado ainda.</p>
+              <p className="text-sm">Complete conquistas para desbloquear títulos!</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
     </div>
   );

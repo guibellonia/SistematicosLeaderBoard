@@ -76,6 +76,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigateToProfile }) => 
   const [selectedReason, setSelectedReason] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [isAddingPoint, setIsAddingPoint] = useState(false);
+  const [currentSeason, setCurrentSeason] = useState<any>(null);
   const [historyData, setHistoryData] = useState<{ history: any[]; total: number; totalPages: number }>({
     history: [],
     total: 0,
@@ -113,6 +114,21 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigateToProfile }) => 
     }
   };
 
+  // Load current season info
+  useEffect(() => {
+    const loadSeasonInfo = async () => {
+      try {
+        const seasonResponse = await SystemAPI.getCurrentSeason();
+        if (seasonResponse.success) {
+          setCurrentSeason(seasonResponse.season);
+        }
+      } catch (error) {
+        console.error('Erro ao carregar informações da temporada:', error);
+      }
+    };
+    loadSeasonInfo();
+  }, []);
+
   useEffect(() => {
     loadGlobalHistory();
   }, [currentPage]);
@@ -136,9 +152,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigateToProfile }) => 
     change: null
   }));
 
-  // Calculate stats from history
+  // Calculate stats from history - only for current user
   const todayRecords = historyData.history.filter(record => {
-    if (!record?.timestamp) return false;
+    if (!record?.timestamp || !record?.username) return false;
+    // Filter only records from current user
+    if (record.username !== user?.username) return false;
     try {
       const recordDate = new Date(record.timestamp).toDateString();
       const today = new Date().toDateString();
@@ -160,7 +178,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigateToProfile }) => 
       setIsAddingPoint(true);
       try {
         console.log(`🎯 Registrando ponto: ${reason.label} (+${reason.points})`);
-        await addPointRecord(reason.label, reason.points);
+        await addPointRecord(reason.label, reason.points, reason.id);
         toast.success(`Ponto registrado! +${reason.points} pontos por "${reason.label}"`);
         setSelectedReason('');
         
@@ -219,6 +237,37 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigateToProfile }) => 
     }
   };
 
+  const handleFinalizeSeason = async () => {
+    if (!confirm('🏆 ATENÇÃO: Isto irá finalizar a temporada atual, atribuir vencedores e criar uma nova temporada. Esta ação não pode ser desfeita. Continuar?')) {
+      return;
+    }
+    
+    try {
+      console.log('🏆 Finalizando temporada...');
+      const response = await SystemAPI.finalizeSeason();
+      if (response.success) {
+        toast.success(`🎉 ${response.message}`);
+        // Show winners
+        if (response.winners) {
+          const winnersMessage = `🥇 1º: ${response.winners.first?.username || 'N/A'}\n🥈 2º: ${response.winners.second?.username || 'N/A'}\n🥉 3º: ${response.winners.third?.username || 'N/A'}`;
+          toast.success(`Vencedores da temporada:\n${winnersMessage}`, { duration: 8000 });
+        }
+        // Update season info
+        if (response.newSeason) {
+          setCurrentSeason(response.newSeason);
+        }
+        // Refresh all data
+        await syncWithServer();
+        await loadGlobalHistory();
+      } else {
+        toast.error('❌ Erro ao finalizar temporada');
+      }
+    } catch (error) {
+      console.error('❌ Erro ao finalizar:', error);
+      toast.error('❌ Erro ao finalizar temporada');
+    }
+  };
+
   const currentDateTime = new Date().toLocaleString('pt-BR', {
     day: '2-digit',
     month: '2-digit',
@@ -237,8 +286,25 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigateToProfile }) => 
           <p className="text-muted-foreground">
             Bem-vindo de volta, {user?.username}!
           </p>
+          {currentSeason && (
+            <p className="text-sm text-primary font-medium">
+              📅 {currentSeason.title || `Temporada ${currentSeason.number} ${currentSeason.year}`}
+            </p>
+          )}
         </div>
         <div className="flex items-center gap-4">
+          {/* Bellonia controls - mostrar apenas para bellonia */}
+          {user?.username === 'bellonia' && (
+            <Button
+              variant="default"
+              size="sm"
+              onClick={handleFinalizeSeason}
+              className="text-xs bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800"
+            >
+              🏆 Finalizar Temporada
+            </Button>
+          )}
+
           {/* Admin controls - mostrar apenas para admins */}
           {(user?.username === 'admin' || user?.username === 'dev' || user?.username === 'moderator') && (
             <div className="flex items-center gap-2">

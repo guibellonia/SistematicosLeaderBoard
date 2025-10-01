@@ -20,9 +20,10 @@ import {
   Calendar,
   Trash2,
   Crown,
+  ArrowLeft,
+  Timer,
   Target,
   Medal,
-  ArrowLeft,
   Zap,
   Star,
   Heart,
@@ -40,7 +41,6 @@ import {
   Gem,
   Sparkles,
   Bolt,
-  Crown as CrownIcon,
   Award,
   Gift,
   Smile,
@@ -49,10 +49,10 @@ import {
   BookOpen,
   Music,
   Gamepad2,
-  Timer,
   Infinity
 } from 'lucide-react';
 import { toast } from 'sonner@2.0.3';
+import { calculateAchievements, getUserTitle, calculateEarnedTitles, getAllTitles } from './achievements-definitions';
 
 interface ProfileProps {
   section?: string;
@@ -66,6 +66,7 @@ export const Profile: React.FC<ProfileProps> = ({ section = 'profile', targetUse
   const [activeTab, setActiveTab] = useState(section);
   const [isLoading, setIsLoading] = useState(false);
   const [user, setUser] = useState(currentUser);
+  const [selectedTitleId, setSelectedTitleId] = useState<string | null>(null);
 
   const isOwnProfile = !targetUser || targetUser === currentUser?.username;
 
@@ -95,9 +96,25 @@ export const Profile: React.FC<ProfileProps> = ({ section = 'profile', targetUse
 
 
 
+  // Load selected title from localStorage
+  useEffect(() => {
+    if (isOwnProfile && user?.id) {
+      const savedTitleId = localStorage.getItem(`selectedTitle_${user.id}`);
+      setSelectedTitleId(savedTitleId);
+    }
+  }, [isOwnProfile, user?.id]);
 
-  // Calculate achievements dynamically
-  const calculateAchievements = () => {
+  // Save selected title to localStorage
+  const handleTitleSelect = (titleId: string) => {
+    if (isOwnProfile && user?.id) {
+      setSelectedTitleId(titleId);
+      localStorage.setItem(`selectedTitle_${user.id}`, titleId);
+      toast.success('Título selecionado com sucesso!');
+    }
+  };
+
+  // Calculate achievements using unified definitions
+  const getUserAchievements = () => {
     if (!user?.id || !pointRecords) return [];
 
     const userRecords = pointRecords.filter(record => record?.userId === user.id);
@@ -105,513 +122,7 @@ export const Profile: React.FC<ProfileProps> = ({ section = 'profile', targetUse
     const leaderboard = getLeaderboard() || [];
     const userRank = leaderboard.findIndex(u => u?.id === user.id) + 1;
 
-    const achievementDefinitions = [
-      // Conquistas básicas
-      {
-        id: 'first_point',
-        name: 'Primeiro Passo',
-        description: 'Registrou seu primeiro ponto',
-        icon: Zap,
-        condition: () => userRecords.length > 0
-      },
-      {
-        id: 'five_points',
-        name: 'Aquecendo',
-        description: 'Acumule 5 pontos totais',
-        icon: Flame,
-        condition: () => totalPoints >= 5
-      },
-      {
-        id: 'ten_points',
-        name: 'Dez na Área',
-        description: 'Acumule 10 pontos totais',
-        icon: Bolt,
-        condition: () => totalPoints >= 10
-      },
-      {
-        id: 'top_3',
-        name: 'Pódio',
-        description: 'Fique entre os 3 primeiros no leaderboard',
-        icon: Trophy,
-        condition: () => userRank > 0 && userRank <= 3
-      },
-      {
-        id: 'hundred_points',
-        name: 'Centena',
-        description: 'Acumule 100 pontos totais',
-        icon: Target,
-        condition: () => totalPoints >= 100
-      },
-      {
-        id: '5',
-        name: 'Mentor',
-        description: 'Ajude 10 colegas (registre "Ajudar um colega" 10 vezes)',
-        icon: Heart,
-        condition: () => {
-          const helpRecords = userRecords.filter(r => 
-            r?.reason?.toLowerCase().includes('ajudar') || 
-            r?.reason?.toLowerCase().includes('colega')
-          );
-          return helpRecords.length >= 10;
-        }
-      },
-      {
-        id: '6',
-        name: 'Specialist',
-        description: 'Acumule 500 pontos totais',
-        icon: Award,
-        condition: () => totalPoints >= 500
-      },
-
-      // Conquistas intermediárias
-      {
-        id: '7',
-        name: 'Xingador Profissional',
-        description: 'Xingue o Henaldo 25 vezes',
-        icon: Angry,
-        condition: () => {
-          const henaldoRecords = userRecords.filter(r => 
-            r?.reason?.toLowerCase().includes('henaldo') || 
-            r?.reason?.toLowerCase().includes('xingar')
-          );
-          return henaldoRecords.length >= 25;
-        }
-      },
-      {
-        id: '8',
-        name: 'Estudioso',
-        description: 'Tire total em 5 avaliações',
-        icon: BookOpen,
-        condition: () => {
-          const totalRecords = userRecords.filter(r => 
-            r?.reason?.toLowerCase().includes('total') || 
-            r?.reason?.toLowerCase().includes('avaliação')
-          );
-          return totalRecords.length >= 5;
-        }
-      },
-      {
-        id: '9',
-        name: 'Madrugador',
-        description: 'Registre pontos antes das 7h da manhã 10 vezes',
-        icon: Sun,
-        condition: () => {
-          const earlyRecords = userRecords.filter(r => {
-            try {
-              const hour = new Date(r.timestamp).getHours();
-              return hour < 7;
-            } catch {
-              return false;
-            }
-          });
-          return earlyRecords.length >= 10;
-        }
-      },
-      {
-        id: '10',
-        name: 'Coruja Noturna',
-        description: 'Registre pontos depois das 23h 15 vezes',
-        icon: Moon,
-        condition: () => {
-          const nightRecords = userRecords.filter(r => {
-            try {
-              const hour = new Date(r.timestamp).getHours();
-              return hour >= 23;
-            } catch {
-              return false;
-            }
-          });
-          return nightRecords.length >= 15;
-        }
-      },
-      {
-        id: '11',
-        name: 'Velocista',
-        description: 'Registre 10 pontos em um único dia',
-        icon: Bolt,
-        condition: () => {
-          const dateGroups = {};
-          userRecords.forEach(r => {
-            try {
-              const date = new Date(r.timestamp).toDateString();
-              dateGroups[date] = (dateGroups[date] || 0) + (r.points || 5);
-            } catch {}
-          });
-          return Object.values(dateGroups).some(points => points >= 50); // 10 registros de 5 pontos
-        }
-      },
-      {
-        id: '12',
-        name: 'Rei da Montanha',
-        description: 'Fique em #1 no leaderboard',
-        icon: Mountain,
-        condition: () => userRank === 1
-      },
-      {
-        id: '13',
-        name: 'Café com Açúcar',
-        description: 'Registre pontos relacionados a café 20 vezes',
-        icon: Coffee,
-        condition: () => {
-          const coffeeRecords = userRecords.filter(r => 
-            r?.reason?.toLowerCase().includes('café') || 
-            r?.reason?.toLowerCase().includes('coffee')
-          );
-          return coffeeRecords.length >= 20;
-        }
-      },
-
-      // Conquistas avançadas
-      {
-        id: '14',
-        name: 'Genio',
-        description: 'Acumule 1000 pontos totais',
-        icon: Brain,
-        condition: () => totalPoints >= 1000
-      },
-      {
-        id: '15',
-        name: 'Sequência Épica',
-        description: 'Registre pontos por 30 dias consecutivos',
-        icon: Flame,
-        condition: () => {
-          const dates = userRecords.map(r => {
-            try {
-              return new Date(r.timestamp).toDateString();
-            } catch {
-              return null;
-            }
-          }).filter(Boolean);
-          
-          const uniqueDates = [...new Set(dates)].sort();
-          let consecutiveDays = 1;
-          let maxConsecutive = 1;
-          
-          for (let i = 1; i < uniqueDates.length; i++) {
-            const prevDate = new Date(uniqueDates[i - 1]);
-            const currDate = new Date(uniqueDates[i]);
-            const diffDays = (currDate.getTime() - prevDate.getTime()) / (1000 * 60 * 60 * 24);
-            
-            if (diffDays === 1) {
-              consecutiveDays++;
-              maxConsecutive = Math.max(maxConsecutive, consecutiveDays);
-            } else {
-              consecutiveDays = 1;
-            }
-          }
-          
-          return maxConsecutive >= 30;
-        }
-      },
-      {
-        id: '16',
-        name: 'Veterano',
-        description: 'Faça 100 registros de pontos',
-        icon: Medal,
-        condition: () => userRecords.length >= 100
-      },
-      {
-        id: '17',
-        name: 'Workaholic',
-        description: 'Registre pontos em todos os 7 dias da semana',
-        icon: Timer,
-        condition: () => {
-          const weekdays = new Set();
-          userRecords.forEach(r => {
-            try {
-              const day = new Date(r.timestamp).getDay();
-              weekdays.add(day);
-            } catch {}
-          });
-          return weekdays.size === 7;
-        }
-      },
-      {
-        id: '18',
-        name: 'Popular',
-        description: 'Acumule 1000 pontos totais',
-        icon: Heart,
-        condition: () => totalPoints >= 1000
-      },
-
-      // Conquistas lendárias
-      {
-        id: '19',
-        name: 'Lenda Viva',
-        description: 'Acumule 2500 pontos totais',
-        icon: Star,
-        condition: () => totalPoints >= 2500
-      },
-      {
-        id: '20',
-        name: 'Imortal',
-        description: 'Registre pontos por 100 dias consecutivos',
-        icon: Shield,
-        condition: () => {
-          const dates = userRecords.map(r => {
-            try {
-              return new Date(r.timestamp).toDateString();
-            } catch {
-              return null;
-            }
-          }).filter(Boolean);
-          
-          const uniqueDates = [...new Set(dates)].sort();
-          let consecutiveDays = 1;
-          let maxConsecutive = 1;
-          
-          for (let i = 1; i < uniqueDates.length; i++) {
-            const prevDate = new Date(uniqueDates[i - 1]);
-            const currDate = new Date(uniqueDates[i]);
-            const diffDays = (currDate.getTime() - prevDate.getTime()) / (1000 * 60 * 60 * 24);
-            
-            if (diffDays === 1) {
-              consecutiveDays++;
-              maxConsecutive = Math.max(maxConsecutive, consecutiveDays);
-            } else {
-              consecutiveDays = 1;
-            }
-          }
-          
-          return maxConsecutive >= 100;
-        }
-      },
-      {
-        id: '21',
-        name: 'Mestre dos Pontos',
-        description: 'Faça 500 registros de pontos',
-        icon: Sword,
-        condition: () => userRecords.length >= 500
-      },
-      {
-        id: '22',
-        name: 'Diamante Bruto',
-        description: 'Acumule 5000 pontos totais',
-        icon: Diamond,
-        condition: () => totalPoints >= 5000
-      },
-      {
-        id: '23',
-        name: 'Rei Henaldo',
-        description: 'Xingue o Henaldo 100 vezes (você é o novo Henaldo!)',
-        icon: Skull,
-        condition: () => {
-          const henaldoRecords = userRecords.filter(r => 
-            r?.reason?.toLowerCase().includes('henaldo') || 
-            r?.reason?.toLowerCase().includes('xingar')
-          );
-          return henaldoRecords.length >= 100;
-        }
-      },
-
-      // Conquistas ultra raras
-      {
-        id: '24',
-        name: 'Deus dos Pontos',
-        description: 'Acumule 10000 pontos totais',
-        icon: Crown,
-        condition: () => totalPoints >= 10000
-      },
-      {
-        id: '25',
-        name: 'Ascendido',
-        description: 'Registre pontos por 365 dias consecutivos (1 ano)',
-        icon: Infinity,
-        condition: () => {
-          const dates = userRecords.map(r => {
-            try {
-              return new Date(r.timestamp).toDateString();
-            } catch {
-              return null;
-            }
-          }).filter(Boolean);
-          
-          const uniqueDates = [...new Set(dates)].sort();
-          let consecutiveDays = 1;
-          let maxConsecutive = 1;
-          
-          for (let i = 1; i < uniqueDates.length; i++) {
-            const prevDate = new Date(uniqueDates[i - 1]);
-            const currDate = new Date(uniqueDates[i]);
-            const diffDays = (currDate.getTime() - prevDate.getTime()) / (1000 * 60 * 60 * 24);
-            
-            if (diffDays === 1) {
-              consecutiveDays++;
-              maxConsecutive = Math.max(maxConsecutive, consecutiveDays);
-            } else {
-              consecutiveDays = 1;
-            }
-          }
-          
-          return maxConsecutive >= 365;
-        }
-      },
-      {
-        id: '26',
-        name: 'Conquistador Universal',
-        description: 'Desbloqueie todas as outras conquistas',
-        icon: CrownIcon,
-        condition: () => {
-          // Esta conquista só é desbloqueada quando todas as outras estão desbloqueadas
-          // Será verificada no final
-          return false;
-        }
-      },
-
-      // Conquistas especiais/easter eggs
-      {
-        id: '27',
-        name: 'Sortudo',
-        description: 'Registre pontos às 13:13 em uma sexta-feira 13',
-        icon: Sparkles,
-        condition: () => {
-          return userRecords.some(r => {
-            try {
-              const date = new Date(r.timestamp);
-              const isFriday13 = date.getDay() === 5 && date.getDate() === 13;
-              const isLuckyTime = date.getHours() === 13 && date.getMinutes() === 13;
-              return isFriday13 && isLuckyTime;
-            } catch {
-              return false;
-            }
-          });
-        }
-      },
-      {
-        id: '28',
-        name: 'Gamer Raiz',
-        description: 'Registre pontos relacionados a jogos 50 vezes',
-        icon: Gamepad2,
-        condition: () => {
-          const gameRecords = userRecords.filter(r => 
-            r?.reason?.toLowerCase().includes('jogo') || 
-            r?.reason?.toLowerCase().includes('game') ||
-            r?.reason?.toLowerCase().includes('jogar')
-          );
-          return gameRecords.length >= 50;
-        }
-      },
-      {
-        id: '29',
-        name: 'Melômano',
-        description: 'Registre pontos relacionados a música 30 vezes',
-        icon: Music,
-        condition: () => {
-          const musicRecords = userRecords.filter(r => 
-            r?.reason?.toLowerCase().includes('música') || 
-            r?.reason?.toLowerCase().includes('music') ||
-            r?.reason?.toLowerCase().includes('cantar') ||
-            r?.reason?.toLowerCase().includes('tocar')
-          );
-          return musicRecords.length >= 30;
-        }
-      },
-      {
-        id: '30',
-        name: 'Idealizador',
-        description: 'Registre pontos relacionados a ideias ou criatividade 40 vezes',
-        icon: Lightbulb,
-        condition: () => {
-          const ideaRecords = userRecords.filter(r => 
-            r?.reason?.toLowerCase().includes('ideia') || 
-            r?.reason?.toLowerCase().includes('criar') ||
-            r?.reason?.toLowerCase().includes('inventar') ||
-            r?.reason?.toLowerCase().includes('inovar')
-          );
-          return ideaRecords.length >= 40;
-        }
-      },
-      {
-        id: '31',
-        name: 'Motivador',
-        description: 'Registre pontos relacionados a motivar outros 25 vezes',
-        icon: Gift,
-        condition: () => {
-          const motivateRecords = userRecords.filter(r => 
-            r?.reason?.toLowerCase().includes('motivar') || 
-            r?.reason?.toLowerCase().includes('encorajar') ||
-            r?.reason?.toLowerCase().includes('inspirar')
-          );
-          return motivateRecords.length >= 25;
-        }
-      },
-      {
-        id: '32',
-        name: 'Sorriso Fácil',
-        description: 'Registre pontos relacionados a humor ou risadas 35 vezes',
-        icon: Smile,
-        condition: () => {
-          const funRecords = userRecords.filter(r => 
-            r?.reason?.toLowerCase().includes('rir') || 
-            r?.reason?.toLowerCase().includes('piada') ||
-            r?.reason?.toLowerCase().includes('humor') ||
-            r?.reason?.toLowerCase().includes('engraçado')
-          );
-          return funRecords.length >= 35;
-        }
-      },
-      {
-        id: '33',
-        name: 'Explorador',
-        description: 'Registre pontos usando 20 motivos diferentes',
-        icon: Rocket,
-        condition: () => {
-          const uniqueReasons = new Set(userRecords.map(r => r?.reason?.toLowerCase()).filter(Boolean));
-          return uniqueReasons.size >= 20;
-        }
-      },
-      {
-        id: '34',
-        name: 'Campeão Supremo',
-        description: 'Seja #1 no leaderboard por 30 dias consecutivos',
-        icon: Trophy,
-        condition: () => {
-          // Esta seria uma conquista complexa que requer histórico de rankings
-          // Por enquanto, vamos usar uma aproximação
-          return userRank === 1 && totalPoints >= 3000;
-        }
-      },
-      {
-        id: '35',
-        name: 'Lendário',
-        description: 'Acumule 20000 pontos totais (você transcendeu)',
-        icon: Gem,
-        condition: () => totalPoints >= 20000
-      }
-    ];
-
-    const processedAchievements = achievementDefinitions.map(achievement => {
-      const unlocked = achievement.condition();
-      let unlockedDate = null;
-      
-      if (unlocked && userRecords.length > 0) {
-        // Use the date of the first record for "Primeiro Ponto" or the latest for others
-        if (achievement.id === '1') {
-          unlockedDate = userRecords[0]?.timestamp;
-        } else {
-          unlockedDate = userRecords[userRecords.length - 1]?.timestamp;
-        }
-      }
-      
-      return {
-        ...achievement,
-        unlocked,
-        date: unlockedDate ? new Date(unlockedDate).toLocaleDateString('pt-BR') : null
-      };
-    });
-
-    // Verificar conquista "Conquistador Universal" após processar todas as outras
-    const conquistadorUniversal = processedAchievements.find(a => a.id === '26');
-    if (conquistadorUniversal) {
-      const otherAchievements = processedAchievements.filter(a => a.id !== '26');
-      const allOthersUnlocked = otherAchievements.every(a => a.unlocked);
-      conquistadorUniversal.unlocked = allOthersUnlocked;
-      if (allOthersUnlocked && userRecords.length > 0) {
-        conquistadorUniversal.date = new Date().toLocaleDateString('pt-BR');
-      }
-    }
-
-    return processedAchievements;
+    return calculateAchievements(userRecords, totalPoints, userRank);
   };
 
   // Get seasons (for now, just current season)
@@ -629,29 +140,9 @@ export const Profile: React.FC<ProfileProps> = ({ section = 'profile', targetUse
     ];
   };
 
-  // Calculate user title based on achievements
-  const calculateUserTitle = (achievements) => {
-    const unlockedCount = achievements.filter(a => a.unlocked).length;
-    
-    if (unlockedCount >= 30) return { title: '🌟 Deus Supremo', color: 'bg-gradient-to-r from-yellow-400 to-orange-500' };
-    if (unlockedCount >= 25) return { title: '⚡ Transcendente', color: 'bg-gradient-to-r from-purple-600 to-pink-600' };
-    if (unlockedCount >= 20) return { title: '🔥 Lendário', color: 'bg-gradient-to-r from-red-500 to-orange-600' };
-    if (unlockedCount >= 15) return { title: '💎 Imortal', color: 'bg-gradient-to-r from-blue-600 to-purple-600' };
-    if (unlockedCount >= 12) return { title: '⚔️ Conquistador', color: 'bg-gradient-to-r from-gray-700 to-gray-900' };
-    if (unlockedCount >= 10) return { title: '🏆 Mestre', color: 'bg-gradient-to-r from-yellow-600 to-yellow-500' };
-    if (unlockedCount >= 8) return { title: '👑 Nobre', color: 'bg-gradient-to-r from-purple-500 to-purple-700' };
-    if (unlockedCount >= 6) return { title: '⭐ Veterano', color: 'bg-gradient-to-r from-green-500 to-green-700' };
-    if (unlockedCount >= 5) return { title: '🚀 Expert', color: 'bg-gradient-to-r from-blue-500 to-blue-700' };
-    if (unlockedCount >= 4) return { title: '🧠 Onipotente', color: 'bg-gradient-to-r from-pink-500 to-red-500' };
-    if (unlockedCount >= 3) return { title: '💀 Crânio', color: 'bg-gradient-to-r from-gray-600 to-gray-800' };
-    if (unlockedCount >= 2) return { title: '🤓 Sabido', color: 'bg-gradient-to-r from-green-400 to-blue-500' };
-    if (unlockedCount >= 1) return { title: '🐣 Noob', color: 'bg-gradient-to-r from-yellow-300 to-orange-400' };
-    
-    return { title: '👶 Iniciante', color: 'bg-gray-200' };
-  };
-
-  const achievements = calculateAchievements();
-  const userTitle = calculateUserTitle(achievements);
+  const achievements = getUserAchievements();
+  const userTitle = getUserTitle(achievements, selectedTitleId, isOwnProfile);
+  const earnedTitles = calculateEarnedTitles(achievements);
   const seasons = getSeasons();
 
   // Update active tab when section prop changes
@@ -823,6 +314,66 @@ export const Profile: React.FC<ProfileProps> = ({ section = 'profile', targetUse
               )}
             </CardContent>
           </Card>
+
+          {/* Seção de Títulos Conquistados */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Crown className="h-5 w-5" />
+                Títulos Conquistados
+              </CardTitle>
+              <CardDescription>
+                {isOwnProfile ? 'Clique em um título para selecioná-lo como seu título principal' : `Todos os títulos que ${user?.username} desbloqueou`}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {earnedTitles.map((titleInfo) => (
+                  <div
+                    key={titleInfo.id}
+                    onClick={() => isOwnProfile && handleTitleSelect(titleInfo.id)}
+                    className={`p-4 rounded-lg border transition-all duration-200 ${
+                      isOwnProfile ? 'cursor-pointer hover:scale-102 hover:shadow-xl' : ''
+                    } ${titleInfo.color} text-white shadow-lg ${
+                      selectedTitleId === titleInfo.id ? 'ring-2 ring-white/50' : ''
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1">
+                        <h4 className="font-semibold">{titleInfo.title}</h4>
+                        <p className="text-sm opacity-90">{titleInfo.description}</p>
+                        {isOwnProfile && (
+                          <div className="mt-2 text-xs opacity-75">
+                            {selectedTitleId === titleInfo.id ? '✓ Título ativo' : 'Clique para selecionar'}
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        {selectedTitleId === titleInfo.id && isOwnProfile && (
+                          <Badge className="bg-white/20 text-white border-white/20 text-xs">
+                            Selecionado
+                          </Badge>
+                        )}
+                        {!selectedTitleId && titleInfo.title === userTitle.title && (
+                          <Badge className="bg-white/20 text-white border-white/20 text-xs">
+                            Atual
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              
+              {earnedTitles.length === 0 && (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Crown className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <p>Nenhum título conquistado ainda.</p>
+                  <p className="text-sm">Complete conquistas para desbloquear títulos!</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
 
 
@@ -903,6 +454,8 @@ export const Profile: React.FC<ProfileProps> = ({ section = 'profile', targetUse
                   );
                 })}
               </div>
+              
+
             </CardContent>
           </Card>
         </TabsContent>

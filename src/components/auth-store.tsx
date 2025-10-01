@@ -25,6 +25,7 @@ export interface Achievement {
 export interface PointRecord {
   id: string;
   username: string;
+  userId?: string; // ID do usuário para facilitar filtros
   reason: string;
   points: number;
   timestamp: string;
@@ -47,7 +48,7 @@ interface AuthActions {
   login: (username: string, password: string) => Promise<{ success: boolean; error?: string }>;
   register: (username: string, password: string, confirmPassword: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
-  addPointRecord: (reason: string, points: number) => Promise<void>;
+  addPointRecord: (reason: string, points: number, reasonId?: string) => Promise<void>;
   refreshData: () => Promise<void>;
   getHistory: (page?: number) => Promise<{ history: PointRecord[]; total: number; totalPages: number }>;
   getAllUsers: () => User[];
@@ -332,7 +333,7 @@ export const useAuthStore = create<AuthStore>()((set, get) => ({
     });
   },
 
-  addPointRecord: async (reason: string, points: number) => {
+  addPointRecord: async (reason: string, points: number, reasonId?: string) => {
     const { currentUser } = get();
     if (!currentUser) {
       console.error('❌ Nenhum usuário autenticado para adicionar ponto');
@@ -352,14 +353,17 @@ export const useAuthStore = create<AuthStore>()((set, get) => ({
       }
       console.log('✅ Sessão válida, prosseguindo com adição de ponto');
 
-      const response = await SystemAPI.addPoint(reason, points);
+      const response = await SystemAPI.addPoint(reason, points, reasonId);
       console.log('📥 Resposta do addPoint:', response);
       
       if (response.success) {
         console.log('✅ Ponto adicionado com sucesso!');
         set(state => ({
           currentUser: response.user,
-          pointRecords: [response.record, ...state.pointRecords],
+          pointRecords: [{
+            ...response.record,
+            userId: currentUser.id
+          }, ...state.pointRecords],
           isLoading: false,
         }));
 
@@ -456,6 +460,24 @@ export const useAuthStore = create<AuthStore>()((set, get) => ({
             set({ currentUser: updatedUser });
           }
         }
+      }
+
+      // Buscar registros globais de pontos para calcular conquistas
+      const globalHistoryResponse = await SystemAPI.getGlobalHistory(1, 1000); // Buscar últimos 1000 registros
+      if (globalHistoryResponse.success && usersResponse.success) {
+        // Converter o histórico global para o formato de pointRecords
+        const pointRecords = globalHistoryResponse.history.map(record => ({
+          id: record.id || `${record.username}-${record.timestamp}`,
+          username: record.username,
+          userId: record.userId || usersResponse.users.find(u => u.username === record.username)?.id || record.username,
+          reason: record.reason,
+          points: record.points,
+          timestamp: record.timestamp,
+          date: record.date || new Date(record.timestamp).toISOString().split('T')[0]
+        }));
+        
+        set({ pointRecords });
+        console.log(`📊 Carregados ${pointRecords.length} registros de pontos para cálculo de conquistas`);
       }
 
       // Buscar status do servidor

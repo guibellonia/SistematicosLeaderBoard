@@ -64,11 +64,11 @@ export class SystemAPI {
   }
 
   // Pontos
-  static async addPoint(reason: string, points: number) {
-    console.log(`📤 Enviando ponto para servidor: ${reason}, ${points}`)
+  static async addPoint(reason: string, points: number, reasonId?: string) {
+    console.log(`📤 Enviando ponto para servidor: ${reason}, ${points}, reasonId: ${reasonId}`)
     const result = await this.request('/points/add', {
       method: 'POST',
-      body: JSON.stringify({ reason, points }),
+      body: JSON.stringify({ reason, points, reasonId }),
     }, true) // Requer autenticação
     console.log(`📥 Resposta do servidor:`, result)
     return result
@@ -123,6 +123,23 @@ export class SystemAPI {
     return this.request('/admin/cleanup-users', {
       method: 'POST'
     })
+  }
+
+  // Temporadas
+  static async getCurrentSeason() {
+    return this.request('/season/current')
+  }
+
+  static async getSeasonHistory(username: string) {
+    return this.request(`/season/history/${username}`, {}, true)
+  }
+
+  // Bellonia - Finalizar temporada
+  static async finalizeSeason() {
+    console.log('🏆 Solicitando finalização da temporada...')
+    return this.request('/admin/finalize-season', {
+      method: 'POST'
+    }, true) // Requer autenticação
   }
 }
 
