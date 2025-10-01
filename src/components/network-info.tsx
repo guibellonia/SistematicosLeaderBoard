@@ -150,6 +150,65 @@ export const NetworkInfo: React.FC<NetworkInfoProps> = ({ onClose }) => {
             </ul>
           </div>
 
+          {/* Firewall Troubleshooting */}
+          <div className="space-y-4">
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-6 bg-destructive/20 rounded-full flex items-center justify-center">
+                <span className="text-xs text-destructive">🛡️</span>
+              </div>
+              <h3 className="font-medium text-destructive">Firewall bloqueando?</h3>
+            </div>
+            
+            <div className="bg-destructive/5 border border-destructive/20 rounded-lg p-4 space-y-3">
+              <p className="text-sm text-muted-foreground">
+                Se seus amigos não conseguem acessar, siga estes passos:
+              </p>
+              
+              <div className="space-y-2">
+                <div className="text-sm">
+                  <strong>1. Windows (Execute como Admin):</strong>
+                  <div className="bg-black text-green-400 p-2 rounded mt-1 font-mono text-xs">
+                    netsh advfirewall firewall add rule name="Sistemáticos" dir=in action=allow protocol=TCP localport=3000
+                  </div>
+                </div>
+                
+                <div className="text-sm">
+                  <strong>2. Ou desabilite o firewall temporariamente:</strong>
+                  <p className="text-muted-foreground text-xs mt-1">
+                    Windows: Painel de Controle → Firewall → Desativar<br/>
+                    Mac: Preferências → Segurança → Firewall → Desligar
+                  </p>
+                </div>
+                
+                <div className="text-sm">
+                  <strong>3. Teste diferentes portas:</strong>
+                  <div className="bg-black text-green-400 p-2 rounded mt-1 font-mono text-xs">
+                    npm run dev -- --host --port 8080
+                  </div>
+                </div>
+              </div>
+              
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => copyToClipboard('netsh advfirewall firewall add rule name="Sistemáticos" dir=in action=allow protocol=TCP localport=3000', 'Comando do firewall')}
+                >
+                  <Copy className="h-3 w-3 mr-1" />
+                  Copiar comando
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => copyToClipboard('npm run dev -- --host --port 8080', 'Comando porta alternativa')}
+                >
+                  <Copy className="h-3 w-3 mr-1" />
+                  Porta 8080
+                </Button>
+              </div>
+            </div>
+          </div>
+
           {/* Status */}
           <div className="flex items-center gap-2">
             <Users className="h-4 w-4 text-primary" />

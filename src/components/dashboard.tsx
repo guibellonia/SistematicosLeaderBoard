@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from './auth-context';
 import { useAuthStore } from './auth-store';
 import { Button } from './ui/button';
@@ -24,38 +24,70 @@ const pointReasons = [
 
 export const Dashboard: React.FC = () => {
   const { user } = useAuth();
-  const { pointRecords, addPointRecord, getLeaderboard } = useAuthStore();
+  const { 
+    pointRecords, 
+    addPointRecord, 
+    getLeaderboard, 
+    getHistory,
+    isLoading,
+    error,
+    clearError,
+    refreshData,
+    syncWithServer
+  } = useAuthStore();
   const [selectedReason, setSelectedReason] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
-  const recordsPerPage = 5;
+  const [historyData, setHistoryData] = useState<{ history: any[]; total: number; totalPages: number }>({
+    history: [],
+    total: 0,
+    totalPages: 0
+  });
+  const recordsPerPage = 10;
 
-  // Calculate pagination and get current data
-  const allRecords = pointRecords || [];
-  const totalPages = Math.max(1, Math.ceil(allRecords.length / recordsPerPage));
-  const startIndex = (currentPage - 1) * recordsPerPage;
-  const currentRecords = allRecords.slice(startIndex, startIndex + recordsPerPage);
+  // Load history data
+  useEffect(() => {
+    const loadHistory = async () => {
+      if (user) {
+        const data = await getHistory(currentPage);
+        setHistoryData(data);
+      }
+    };
+    loadHistory();
+  }, [currentPage, user, getHistory]);
+
+  // Auto refresh data
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (user) {
+        syncWithServer();
+      }
+    }, 30000); // Sync every 30 seconds
+
+    return () => clearInterval(interval);
+  }, [user, syncWithServer]);
+
   const allUsers = getLeaderboard() || [];
-  const leaderboardData = allUsers.slice(0, 5).map((user, index) => ({
-    rank: index + 1,
-    name: user?.username || 'Usuário',
-    points: user?.points || 0,
-    change: null // Remover dados fake
+  const leaderboardData = allUsers.slice(0, 5).map((userData, index) => ({
+    rank: userData.rank || (index + 1),
+    name: userData?.username || 'Usuário',
+    points: userData?.points || 0,
+    change: null
   }));
 
-  // Calculate stats
-  const todayRecords = (pointRecords || []).filter(record => {
-    if (!record?.timestamp || !record?.userId || !user?.id) return false;
+  // Calculate stats from history
+  const todayRecords = historyData.history.filter(record => {
+    if (!record?.timestamp) return false;
     try {
       const recordDate = new Date(record.timestamp).toDateString();
       const today = new Date().toDateString();
-      return recordDate === today && record.userId === user.id;
+      return recordDate === today;
     } catch {
       return false;
     }
   });
   const todayPoints = todayRecords.reduce((sum, record) => sum + (record?.points || 0), 0);
 
-  const handleRegisterPoint = () => {
+  const handleRegisterPoint = async () => {
     if (!selectedReason) {
       toast.error('Selecione um motivo para registrar o ponto');
       return;
@@ -63,9 +95,17 @@ export const Dashboard: React.FC = () => {
     
     const reason = pointReasons.find(r => r.id === selectedReason);
     if (reason) {
-      addPointRecord(reason.label, reason.points);
-      toast.success(`Ponto registrado! +${reason.points} pontos por "${reason.label}"`);
-      setSelectedReason('');
+      try {
+        await addPointRecord(reason.label, reason.points);
+        toast.success(`Ponto registrado! +${reason.points} pontos por "${reason.label}"`);
+        setSelectedReason('');
+        
+        // Refresh history
+        const data = await getHistory(currentPage);
+        setHistoryData(data);
+      } catch (error) {
+        toast.error('Erro ao registrar ponto. Tente novamente.');
+      }
     }
   };
 
@@ -94,6 +134,28 @@ export const Dashboard: React.FC = () => {
         </div>
       </div>
 
+      {/* Loading & Error States */}
+      {isLoading && (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <div className="animate-spin h-4 w-4 border-2 border-primary border-t-transparent rounded-full"></div>
+          Sincronizando dados...
+        </div>
+      )}
+      
+      {error && (
+        <div className="bg-destructive/10 border border-destructive/20 text-destructive p-3 rounded-lg">
+          <p className="text-sm">{error}</p>
+          <Button 
+            size="sm" 
+            variant="outline" 
+            onClick={() => { clearError(); refreshData(); }}
+            className="mt-2"
+          >
+            Tentar novamente
+          </Button>
+        </div>
+      )}
+
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <Card>
@@ -104,7 +166,7 @@ export const Dashboard: React.FC = () => {
           <CardContent>
             <div className="text-2xl font-bold">{user?.points || 0}</div>
             <p className="text-xs text-muted-foreground">
-              Total acumulado
+              {user?.totalPoints ? `${user.totalPoints} pontos históricos` : 'Total acumulado'}
             </p>
           </CardContent>
         </Card>
@@ -116,10 +178,10 @@ export const Dashboard: React.FC = () => {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              #{userRank > 0 ? userRank : '-'}
+              #{user?.rank || '-'}
             </div>
             <p className="text-xs text-muted-foreground">
-              no leaderboard geral
+              {allUsers.length > 0 ? `de ${allUsers.length} usuários` : 'no leaderboard geral'}
             </p>
           </CardContent>
         </Card>
@@ -234,8 +296,8 @@ export const Dashboard: React.FC = () => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {currentRecords.length > 0 ? (
-                currentRecords.map((record) => (
+              {historyData.history.length > 0 ? (
+                historyData.history.map((record) => (
                   <TableRow key={record?.id || Math.random()}>
                     <TableCell className="font-medium">{record?.username || 'Usuário'}</TableCell>
                     <TableCell>
@@ -257,7 +319,7 @@ export const Dashboard: React.FC = () => {
             </TableBody>
           </Table>
           
-          {totalPages > 1 && (
+          {historyData.totalPages > 1 && (
             <div className="mt-4">
               <Pagination>
                 <PaginationContent>
@@ -267,7 +329,7 @@ export const Dashboard: React.FC = () => {
                       className={currentPage === 1 ? 'pointer-events-none opacity-50' : ''}
                     />
                   </PaginationItem>
-                  {[...Array(totalPages)].map((_, i) => (
+                  {[...Array(historyData.totalPages)].map((_, i) => (
                     <PaginationItem key={i + 1}>
                       <PaginationLink
                         onClick={() => setCurrentPage(i + 1)}
@@ -279,8 +341,8 @@ export const Dashboard: React.FC = () => {
                   ))}
                   <PaginationItem>
                     <PaginationNext 
-                      onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
-                      className={currentPage === totalPages ? 'pointer-events-none opacity-50' : ''}
+                      onClick={() => setCurrentPage(Math.min(historyData.totalPages, currentPage + 1))}
+                      className={currentPage === historyData.totalPages ? 'pointer-events-none opacity-50' : ''}
                     />
                   </PaginationItem>
                 </PaginationContent>

@@ -1,22 +1,35 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { SystemAPI } from '../utils/supabase/client';
 
 export interface User {
   id: string;
   username: string;
   points: number;
+  totalPoints: number;
+  rank: number;
   avatar?: string;
   createdAt: string;
-  lastLogin: string;
+  lastLogin?: string;
+  achievements?: Achievement[];
+  friends?: string[];
+  joinedAt: string;
+}
+
+export interface Achievement {
+  id: string;
+  name: string;
+  description: string;
+  unlockedAt: string;
 }
 
 export interface PointRecord {
   id: string;
-  userId: string;
+  username: string;
   reason: string;
   points: number;
   timestamp: string;
-  username: string;
+  date: string;
 }
 
 interface AuthState {
@@ -24,17 +37,24 @@ interface AuthState {
   users: User[];
   pointRecords: PointRecord[];
   isAuthenticated: boolean;
+  isLoading: boolean;
+  error: string | null;
+  leaderboard: User[];
+  totalUsers: number;
+  lastSync: string | null;
 }
 
 interface AuthActions {
   login: (username: string, password: string) => Promise<{ success: boolean; error?: string }>;
   register: (username: string, password: string, confirmPassword: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
-  addPointRecord: (reason: string, points: number) => void;
-  updateUserPoints: (userId: string, points: number) => void;
+  addPointRecord: (reason: string, points: number) => Promise<void>;
+  refreshData: () => Promise<void>;
+  getHistory: (page?: number) => Promise<{ history: PointRecord[]; total: number; totalPages: number }>;
   getAllUsers: () => User[];
   getLeaderboard: () => User[];
-  checkSession: () => void;
+  syncWithServer: () => Promise<void>;
+  clearError: () => void;
 }
 
 type AuthStore = AuthState & AuthActions;
@@ -63,252 +83,239 @@ const validatePassword = (password: string): { valid: boolean; error?: string } 
   return { valid: true };
 };
 
-// Simple hash function for passwords (in production, use proper hashing)
-const hashPassword = (password: string): string => {
-  let hash = 0;
-  for (let i = 0; i < password.length; i++) {
-    const char = password.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash = hash & hash; // Convert to 32bit integer
-  }
-  return hash.toString(36);
-};
+export const useAuthStore = create<AuthStore>()((set, get) => ({
+  currentUser: null,
+  users: [],
+  pointRecords: [],
+  isAuthenticated: false,
+  isLoading: false,
+  error: null,
+  leaderboard: [],
+  totalUsers: 0,
+  lastSync: null,
 
-export const useAuthStore = create<AuthStore>()(
-  persist(
-    (set, get) => ({
-      currentUser: null,
-      users: [],
-      pointRecords: [],
-      isAuthenticated: false,
+  login: async (username: string, password: string) => {
+    if (!username || !password) {
+      return { success: false, error: 'Nome de usuário e senha são obrigatórios' };
+    }
 
-      login: async (username: string, password: string) => {
-        const { users } = get();
+    set({ isLoading: true, error: null });
+
+    try {
+      const response = await SystemAPI.login(username.toLowerCase(), password);
+      
+      if (response.success) {
+        set({
+          currentUser: response.user,
+          isAuthenticated: true,
+          isLoading: false,
+        });
         
-        if (!username || !password) {
-          return { success: false, error: 'Nome de usuário e senha são obrigatórios' };
-        }
-
-        // Simular delay de rede
-        await new Promise(resolve => setTimeout(resolve, 500));
-
-        const user = users.find(u => u?.username?.toLowerCase() === username.toLowerCase());
-        
-        if (!user) {
-          return { success: false, error: 'Usuário não encontrado' };
-        }
-
-        // Verificar senha
-        const passwords = JSON.parse(localStorage.getItem('sistematics-passwords') || '{}');
-        const hashedPassword = hashPassword(password);
-        
-        if (passwords[user.id] && passwords[user.id] !== hashedPassword) {
-          return { success: false, error: 'Senha incorreta' };
-        }
-
-        const now = new Date().toISOString();
-        const updatedUser = { ...user, lastLogin: now };
-        
-        // Salvar dados da sessão no sessionStorage
+        // Salvar dados da sessão
         sessionStorage.setItem('sistematics-session', JSON.stringify({
-          userId: updatedUser.id,
-          loginTime: now,
+          userId: response.user.id,
+          username: response.user.username,
+          token: response.token,
+          loginTime: new Date().toISOString(),
           isActive: true
         }));
-        
-        set(state => ({
-          currentUser: updatedUser,
-          isAuthenticated: true,
-          users: state.users.map(u => u.id === user.id ? updatedUser : u)
-        }));
+
+        // Sincronizar dados
+        await get().syncWithServer();
 
         return { success: true };
-      },
-
-      register: async (username: string, password: string, confirmPassword: string) => {
-        const { users } = get();
-
-        // Simular delay de rede
-        await new Promise(resolve => setTimeout(resolve, 500));
-
-        // Validar username
-        if (!username || username.length < 3) {
-          return { success: false, error: 'O nome de usuário deve ter pelo menos 3 caracteres' };
-        }
-
-        if (!/^[a-zA-Z0-9_]+$/.test(username)) {
-          return { success: false, error: 'O nome de usuário pode conter apenas letras, números e underscore' };
-        }
-
-        // Verificar se username já existe
-        if (users.some(u => u.username.toLowerCase() === username.toLowerCase())) {
-          return { success: false, error: 'Este nome de usuário já está em uso' };
-        }
-
-        // Validar senha
-        const passwordValidation = validatePassword(password);
-        if (!passwordValidation.valid) {
-          return { success: false, error: passwordValidation.error };
-        }
-
-        // Verificar confirmação de senha
-        if (password !== confirmPassword) {
-          return { success: false, error: 'As senhas não coincidem' };
-        }
-
-        // Criar novo usuário
-        const now = new Date().toISOString();
-        const newUser: User = {
-          id: Date.now().toString(),
-          username: username.toLowerCase(),
-          points: 0,
-          createdAt: now,
-          lastLogin: now
-        };
-
-        // Salvar senha hasheada em localStorage separado (para segurança básica)
-        const hashedPassword = hashPassword(password);
-        const passwords = JSON.parse(localStorage.getItem('sistematics-passwords') || '{}');
-        passwords[newUser.id] = hashedPassword;
-        localStorage.setItem('sistematics-passwords', JSON.stringify(passwords));
-
-        set(state => ({
-          currentUser: newUser,
-          isAuthenticated: true,
-          users: [...state.users, newUser]
-        }));
-
-        return { success: true };
-      },
-
-      logout: () => {
-        // Limpar dados da sessão
-        sessionStorage.removeItem('sistematics-session');
-        sessionStorage.removeItem('sistematics-temp-data');
-        
-        set({ currentUser: null, isAuthenticated: false });
-      },
-
-      addPointRecord: (reason: string, points: number) => {
-        const { currentUser } = get();
-        if (!currentUser) return;
-
-        const newRecord: PointRecord = {
-          id: Date.now().toString(),
-          userId: currentUser.id,
-          username: currentUser.username,
-          reason,
-          points,
-          timestamp: new Date().toISOString()
-        };
-
-        // Salvar na sessão temporária
-        const tempData = JSON.parse(sessionStorage.getItem('sistematics-temp-data') || '{}');
-        tempData.lastPointRecord = newRecord;
-        sessionStorage.setItem('sistematics-temp-data', JSON.stringify(tempData));
-
-        set(state => ({
-          pointRecords: [newRecord, ...state.pointRecords],
-          currentUser: state.currentUser ? { 
-            ...state.currentUser, 
-            points: state.currentUser.points + points 
-          } : null,
-          users: state.users.map(u => 
-            u && u.id === currentUser.id ? { ...u, points: u.points + points } : u
-          )
-        }));
-      },
-
-      updateUserPoints: (userId: string, points: number) => {
-        set(state => ({
-          users: state.users.map(u => 
-            u && u.id === userId ? { ...u, points: u.points + points } : u
-          ).filter(Boolean),
-          currentUser: state.currentUser?.id === userId ? 
-            { ...state.currentUser, points: state.currentUser.points + points } : 
-            state.currentUser
-        }));
-      },
-
-      getAllUsers: () => {
-        const { users } = get();
-        return (users || []).filter(Boolean);
-      },
-
-      getLeaderboard: () => {
-        const { users } = get();
-        return [...(users || [])].filter(Boolean).sort((a, b) => (b.points || 0) - (a.points || 0));
-      },
-
-      checkSession: () => {
-        const { users } = get();
-        
-        // Verificar se há uma sessão ativa
-        const session = sessionStorage.getItem('sistematics-session');
-        if (session) {
-          try {
-            const sessionData = JSON.parse(session);
-            if (sessionData.isActive && sessionData.userId) {
-              const user = users.find(u => u?.id === sessionData.userId);
-              if (user) {
-                set({ currentUser: user, isAuthenticated: true });
-                return;
-              }
-            }
-          } catch (error) {
-            console.error('Erro ao verificar sessão:', error);
-          }
-        }
-        
-        // Se não há sessão válida, fazer logout
-        set({ currentUser: null, isAuthenticated: false });
-        sessionStorage.removeItem('sistematics-session');
       }
-    }),
-    {
-      name: 'sistematics-auth',
-      storage: {
-        getItem: (name) => {
-          // Tentar primeiro do sessionStorage para dados da sessão atual
-          let str = sessionStorage.getItem(name);
-          if (!str) {
-            // Se não encontrar, tentar do localStorage
-            str = localStorage.getItem(name);
-          }
-          if (!str) return null;
-          try {
-            const data = JSON.parse(str);
-            // Verificar se os dados são válidos
-            if (data && typeof data === 'object') {
-              return data;
-            }
-            return null;
-          } catch (error) {
-            console.error('Erro ao carregar dados:', error);
-            return null;
-          }
-        },
-        setItem: (name, value) => {
-          try {
-            const jsonValue = JSON.stringify(value);
-            // Salvar no localStorage para persistência
-            localStorage.setItem(name, jsonValue);
-            // Salvar no sessionStorage para acesso rápido
-            sessionStorage.setItem(name, jsonValue);
-          } catch (error) {
-            console.error('Erro ao salvar dados:', error);
-          }
-        },
-        removeItem: (name) => {
-          localStorage.removeItem(name);
-          sessionStorage.removeItem(name);
-        },
-      },
-      partialize: (state) => ({
-        users: state.users || [],
-        pointRecords: state.pointRecords || [],
-        // Não persistir currentUser e isAuthenticated, eles são gerenciados pela sessão
-      }),
+      
+      return { success: false, error: response.error };
+    } catch (error: any) {
+      console.error('Erro no login:', error);
+      set({ isLoading: false, error: error.message });
+      return { success: false, error: error.message || 'Erro ao fazer login' };
     }
-  )
-);
+  },
+
+  register: async (username: string, password: string, confirmPassword: string) => {
+    // Validar username
+    if (!username || username.length < 3) {
+      return { success: false, error: 'O nome de usuário deve ter pelo menos 3 caracteres' };
+    }
+
+    if (!/^[a-zA-Z0-9_]+$/.test(username)) {
+      return { success: false, error: 'O nome de usuário pode conter apenas letras, números e underscore' };
+    }
+
+    // Validar senha
+    const passwordValidation = validatePassword(password);
+    if (!passwordValidation.valid) {
+      return { success: false, error: passwordValidation.error };
+    }
+
+    // Verificar confirmação de senha
+    if (password !== confirmPassword) {
+      return { success: false, error: 'As senhas não coincidem' };
+    }
+
+    set({ isLoading: true, error: null });
+
+    try {
+      const response = await SystemAPI.register(username.toLowerCase(), password);
+      
+      if (response.success) {
+        set({
+          currentUser: response.user,
+          isAuthenticated: true,
+          isLoading: false,
+        });
+        
+        // Salvar dados da sessão
+        sessionStorage.setItem('sistematics-session', JSON.stringify({
+          userId: response.user.id,
+          username: response.user.username,
+          loginTime: new Date().toISOString(),
+          isActive: true
+        }));
+
+        // Sincronizar dados
+        await get().syncWithServer();
+
+        return { success: true };
+      }
+      
+      return { success: false, error: response.error };
+    } catch (error: any) {
+      console.error('Erro no cadastro:', error);
+      set({ isLoading: false, error: error.message });
+      return { success: false, error: error.message || 'Erro ao fazer cadastro' };
+    }
+  },
+
+  logout: () => {
+    sessionStorage.removeItem('sistematics-session');
+    sessionStorage.removeItem('sistematics-temp-data');
+    
+    set({ 
+      currentUser: null, 
+      isAuthenticated: false,
+      pointRecords: [],
+      error: null
+    });
+  },
+
+  addPointRecord: async (reason: string, points: number) => {
+    const { currentUser } = get();
+    if (!currentUser) return;
+
+    set({ isLoading: true, error: null });
+
+    try {
+      const response = await SystemAPI.addPoint(currentUser.username, reason, points);
+      
+      if (response.success) {
+        set(state => ({
+          currentUser: response.user,
+          pointRecords: [response.record, ...state.pointRecords],
+          isLoading: false,
+        }));
+
+        // Atualizar leaderboard
+        await get().syncWithServer();
+      }
+    } catch (error: any) {
+      console.error('Erro ao adicionar ponto:', error);
+      set({ isLoading: false, error: error.message });
+    }
+  },
+
+  refreshData: async () => {
+    const { currentUser } = get();
+    if (!currentUser) return;
+
+    try {
+      await get().syncWithServer();
+    } catch (error: any) {
+      console.error('Erro ao atualizar dados:', error);
+      set({ error: error.message });
+    }
+  },
+
+  getHistory: async (page: number = 1) => {
+    const { currentUser } = get();
+    if (!currentUser) {
+      return { history: [], total: 0, totalPages: 0 };
+    }
+
+    try {
+      const response = await SystemAPI.getHistory(currentUser.username, page, 10);
+      
+      if (response.success) {
+        return {
+          history: response.history,
+          total: response.total,
+          totalPages: response.totalPages
+        };
+      }
+      
+      return { history: [], total: 0, totalPages: 0 };
+    } catch (error: any) {
+      console.error('Erro ao buscar histórico:', error);
+      return { history: [], total: 0, totalPages: 0 };
+    }
+  },
+
+  syncWithServer: async () => {
+    try {
+      set({ isLoading: true });
+
+      // Buscar leaderboard
+      const leaderboardResponse = await SystemAPI.getLeaderboard();
+      if (leaderboardResponse.success) {
+        set({ leaderboard: leaderboardResponse.leaderboard });
+      }
+
+      // Buscar todos os usuários
+      const usersResponse = await SystemAPI.getUsers();
+      if (usersResponse.success) {
+        set({ 
+          users: usersResponse.users,
+          totalUsers: usersResponse.users.length
+        });
+      }
+
+      // Buscar status do servidor
+      const statusResponse = await SystemAPI.getStatus();
+      if (statusResponse.success) {
+        set({ 
+          totalUsers: statusResponse.totalUsers,
+          lastSync: statusResponse.timestamp
+        });
+      }
+
+      set({ isLoading: false });
+    } catch (error: any) {
+      console.error('Erro na sincronização:', error);
+      set({ isLoading: false, error: error.message });
+    }
+  },
+
+  getAllUsers: () => {
+    const { users } = get();
+    return users || [];
+  },
+
+  getLeaderboard: () => {
+    const { leaderboard } = get();
+    return leaderboard || [];
+  },
+
+  clearError: () => {
+    set({ error: null });
+  }
+}));
+
+// Auto-sync a cada 30 segundos se estiver autenticado
+setInterval(() => {
+  const { isAuthenticated, syncWithServer } = useAuthStore.getState();
+  if (isAuthenticated) {
+    syncWithServer();
+  }
+}, 30000);

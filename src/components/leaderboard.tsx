@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuthStore } from './auth-store';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
@@ -6,70 +6,45 @@ import { Avatar, AvatarFallback } from './ui/avatar';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Trophy, TrendingUp, Medal, Crown } from 'lucide-react';
 
-
-
 export const Leaderboard: React.FC = () => {
-  const { getLeaderboard, pointRecords } = useAuthStore();
+  const { 
+    getLeaderboard, 
+    syncWithServer, 
+    isLoading, 
+    totalUsers,
+    lastSync
+  } = useAuthStore();
   const [selectedTab, setSelectedTab] = useState('geral');
 
-  // Helper function to calculate points in a date range
-  const calculatePointsInRange = (userId: string, days: number) => {
-    const now = new Date();
-    const startDate = new Date(now.getTime() - (days * 24 * 60 * 60 * 1000));
+  // Auto refresh data
+  useEffect(() => {
+    syncWithServer();
     
-    return (pointRecords || [])
-      .filter(record => {
-        if (!record?.userId || !record?.timestamp || !userId) return false;
-        try {
-          const recordDate = new Date(record.timestamp);
-          // Verificar se a data é válida
-          if (isNaN(recordDate.getTime())) return false;
-          return record.userId === userId && recordDate >= startDate && recordDate <= now;
-        } catch (error) {
-          console.warn('Erro ao processar data do registro:', record.timestamp);
-          return false;
-        }
-      })
-      .reduce((sum, record) => sum + (record?.points || 0), 0);
-  };
+    const interval = setInterval(() => {
+      syncWithServer();
+    }, 30000); // Sync every 30 seconds
 
-  // Get real leaderboard data
+    return () => clearInterval(interval);
+  }, [syncWithServer]);
+
+
+
+  // Get real leaderboard data from server
   const allUsers = getLeaderboard() || [];
-  const realLeaderboardData = allUsers.filter(Boolean).map((user, index) => ({
-    rank: index + 1,
+  const realLeaderboardData = allUsers.filter(Boolean).map((user) => ({
+    rank: user?.rank || 0,
     name: user?.username || 'Usuário',
     points: user?.points || 0,
-    weeklyPoints: calculatePointsInRange(user?.id || '', 7),
-    monthlyPoints: calculatePointsInRange(user?.id || '', 30),
+    totalPoints: user?.totalPoints || 0,
     seasonPoints: user?.points || 0,
-    userId: user?.id
+    userId: user?.id,
+    achievements: user?.achievements || [],
+    joinedAt: user?.joinedAt || user?.createdAt
   }));
 
-  // Calculate weekly leaderboard (sorted by weekly points)
-  const weeklyLeaderboard = realLeaderboardData.length > 0 ? 
-    [...realLeaderboardData]
-      .sort((a, b) => b.weeklyPoints - a.weeklyPoints)
-      .slice(0, 10)
-      .map((user, index) => ({
-        rank: index + 1,
-        name: user.name,
-        points: user.weeklyPoints,
-        change: user.weeklyPoints > 0 ? `+${user.weeklyPoints}` : '0',
-        userId: user.userId
-      })) : [];
-
-  // Calculate monthly leaderboard (sorted by monthly points)
-  const monthlyLeaderboard = realLeaderboardData.length > 0 ?
-    [...realLeaderboardData]
-      .sort((a, b) => b.monthlyPoints - a.monthlyPoints)
-      .slice(0, 10)
-      .map((user, index) => ({
-        rank: index + 1,
-        name: user.name,
-        points: user.monthlyPoints,
-        change: user.monthlyPoints > 0 ? `+${user.monthlyPoints}` : '0',
-        userId: user.userId
-      })) : [];
+  // Simplificar leaderboards (dados baseados no servidor)
+  const weeklyLeaderboard = realLeaderboardData.slice(0, 10);
+  const monthlyLeaderboard = realLeaderboardData.slice(0, 10);
 
   // Use the appropriate leaderboard data
   const leaderboardData = realLeaderboardData;
@@ -100,7 +75,7 @@ export const Leaderboard: React.FC = () => {
     }
   };
 
-  const LeaderboardTable = ({ data, showChange = true }: { data: any[], showChange?: boolean }) => (
+  const LeaderboardTable = ({ data }: { data: any[] }) => (
     <div className="space-y-2">
       {data.length > 0 ? (
         data.map((user, index) => (
@@ -123,14 +98,12 @@ export const Leaderboard: React.FC = () => {
               <p className="text-sm text-muted-foreground">{user?.points || 0} pontos</p>
             </div>
             
-            {showChange && (
-              <Badge 
-                variant={user?.change?.startsWith('+') ? 'default' : 'secondary'}
-                className="text-xs"
-              >
-                {user?.change || '0'}
-              </Badge>
-            )}
+            <Badge 
+              variant="secondary"
+              className="text-xs"
+            >
+              #{user?.rank || index + 1}
+            </Badge>
           </div>
         ))
       ) : (
@@ -150,6 +123,17 @@ export const Leaderboard: React.FC = () => {
         <p className="text-muted-foreground">
           Rankings dos usuários mais ativos na plataforma
         </p>
+        {isLoading && (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground mt-2">
+            <div className="animate-spin h-4 w-4 border-2 border-primary border-t-transparent rounded-full"></div>
+            Sincronizando rankings...
+          </div>
+        )}
+        {lastSync && (
+          <p className="text-xs text-muted-foreground mt-1">
+            Última sincronização: {new Date(lastSync).toLocaleTimeString('pt-BR')} | {totalUsers} usuários online
+          </p>
+        )}
       </div>
 
       {/* Top 3 Podium */}
@@ -318,7 +302,7 @@ export const Leaderboard: React.FC = () => {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {leaderboardData.reduce((sum, user) => sum + user.points, 0)}
+              {leaderboardData.reduce((sum, user) => sum + (user?.points || 0), 0)}
             </div>
             <p className="text-xs text-muted-foreground">
               total da temporada
@@ -334,7 +318,7 @@ export const Leaderboard: React.FC = () => {
           <CardContent>
             <div className="text-2xl font-bold">
               {leaderboardData.length > 0 ? 
-                Math.round(leaderboardData.reduce((sum, user) => sum + user.points, 0) / leaderboardData.length) : 
+                Math.round(leaderboardData.reduce((sum, user) => sum + (user?.points || 0), 0) / leaderboardData.length) : 
                 0
               }
             </div>
