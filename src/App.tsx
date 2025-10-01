@@ -11,6 +11,7 @@ import { Toaster } from './components/ui/sonner';
 const AppContent: React.FC = () => {
   const { isAuthenticated, user } = useAuth();
   const [currentPage, setCurrentPage] = useState('dashboard');
+  const [selectedUser, setSelectedUser] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   
   // Inicializar verificação de sessão
@@ -39,12 +40,24 @@ const AppContent: React.FC = () => {
     return <LoginPage />;
   }
 
+  const handleNavigateToProfile = (username: string) => {
+    setSelectedUser(username);
+    setCurrentPage('user-profile');
+  };
+
+  const handleBackToOwnProfile = () => {
+    setSelectedUser(null);
+    setCurrentPage('profile');
+  };
+
   const renderPage = () => {
     switch (currentPage) {
       case 'dashboard':
-        return <Dashboard />;
+        return <Dashboard onNavigateToProfile={handleNavigateToProfile} />;
       case 'leaderboard':
-        return <Leaderboard />;
+        return <Leaderboard onNavigateToProfile={handleNavigateToProfile} />;
+      case 'user-profile':
+        return <Profile section="profile" targetUser={selectedUser} onBackToOwnProfile={handleBackToOwnProfile} />;
       case 'profile':
         return <Profile section="profile" />;
       case 'friends':
@@ -56,7 +69,7 @@ const AppContent: React.FC = () => {
       case 'settings':
         return <Profile section="settings" />;
       default:
-        return <Dashboard />;
+        return <Dashboard onNavigateToProfile={handleNavigateToProfile} />;
     }
   };
 

@@ -6,7 +6,11 @@ import { Avatar, AvatarFallback } from './ui/avatar';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Trophy, TrendingUp, Medal, Crown } from 'lucide-react';
 
-export const Leaderboard: React.FC = () => {
+interface LeaderboardProps {
+  onNavigateToProfile?: (username: string) => void;
+}
+
+export const Leaderboard: React.FC<LeaderboardProps> = ({ onNavigateToProfile }) => {
   const { 
     getLeaderboard, 
     syncWithServer, 
@@ -81,9 +85,10 @@ export const Leaderboard: React.FC = () => {
         data.map((user, index) => (
           <div
             key={user?.rank || index}
-            className={`flex items-center gap-4 p-4 rounded-lg border transition-colors ${
+            className={`flex items-center gap-4 p-4 rounded-lg border transition-colors cursor-pointer hover:bg-muted/50 ${
               index < 3 ? 'bg-gradient-to-r from-primary/5 to-transparent border-primary/20' : 'bg-card'
             }`}
+            onClick={() => onNavigateToProfile?.(user?.name)}
           >
             <div className={`w-10 h-10 rounded-full flex items-center justify-center ${getRankBadgeColor(user?.rank || index + 1)}`}>
               {(user?.rank || index + 1) <= 3 ? getRankIcon(user?.rank || index + 1) : <span className="text-sm font-bold">{user?.rank || index + 1}</span>}

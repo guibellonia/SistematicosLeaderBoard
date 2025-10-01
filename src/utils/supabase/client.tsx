@@ -8,16 +8,34 @@ export const supabase = createClient(
 
 export const API_BASE_URL = `https://${projectId}.supabase.co/functions/v1/make-server-cc2c4d6e`
 
+// Função para obter token de sessão
+function getSessionToken(): string | null {
+  try {
+    const sessionData = sessionStorage.getItem('sistematics-session');
+    if (sessionData) {
+      const session = JSON.parse(sessionData);
+      return session.token || null;
+    }
+  } catch (error) {
+    console.error('Erro ao obter token de sessão:', error);
+  }
+  return null;
+}
+
 // Classe para fazer requisições para o backend
 export class SystemAPI {
-  private static async request(endpoint: string, options: RequestInit = {}) {
+  private static async request(endpoint: string, options: RequestInit = {}, requireAuth: boolean = false) {
     const url = `${API_BASE_URL}${endpoint}`
+    
+    // Usar token de sessão se disponível e necessário, senão usar chave pública
+    const token = requireAuth ? getSessionToken() : null;
+    const authHeader = token ? `Bearer ${token}` : `Bearer ${publicAnonKey}`;
     
     const response = await fetch(url, {
       ...options,
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${publicAnonKey}`,
+        'Authorization': authHeader,
         ...options.headers,
       },
     })
@@ -47,10 +65,13 @@ export class SystemAPI {
 
   // Pontos
   static async addPoint(username: string, reason: string, points: number) {
-    return this.request('/points/add', {
+    console.log(`📤 Enviando ponto para servidor: ${username}, ${reason}, ${points}`)
+    const result = await this.request('/points/add', {
       method: 'POST',
       body: JSON.stringify({ username, reason, points }),
     })
+    console.log(`📥 Resposta do servidor:`, result)
+    return result
   }
 
   // Leaderboard
@@ -60,7 +81,12 @@ export class SystemAPI {
 
   // Histórico
   static async getHistory(username: string, page: number = 1, limit: number = 10) {
-    return this.request(`/history/${username}?page=${page}&limit=${limit}`)
+    return this.request(`/history/${username}?page=${page}&limit=${limit}`, {}, true)
+  }
+
+  // Histórico global (não precisa de auth)
+  static async getGlobalHistory(page: number = 1, limit: number = 10) {
+    return this.request(`/history/global/recent?page=${page}&limit=${limit}`)
   }
 
   // Usuários
@@ -70,7 +96,35 @@ export class SystemAPI {
 
   // Conquistas
   static async getAchievements(username: string) {
-    return this.request(`/achievements/${username}`)
+    return this.request(`/achievements/${username}`, {}, true)
+  }
+
+  // Perfil de usuário (precisa de auth para ver outros perfis)
+  static async getUserProfile(username: string) {
+    return this.request(`/users/${username}`, {}, true)
+  }
+
+  // Amizades
+  static async getFriends(username: string) {
+    return this.request(`/friends/${username}`, {}, true)
+  }
+
+  static async getFriendRequests(username: string) {
+    return this.request(`/friends/requests/${username}`, {}, true)
+  }
+
+  static async sendFriendRequest(fromUsername: string, toUsername: string) {
+    return this.request('/friends/request', {
+      method: 'POST',
+      body: JSON.stringify({ fromUsername, toUsername }),
+    }, true)
+  }
+
+  static async respondFriendRequest(username: string, requestId: string, accept: boolean) {
+    return this.request('/friends/respond', {
+      method: 'POST',
+      body: JSON.stringify({ username, requestId, accept }),
+    }, true)
   }
 
   // Status

@@ -1,28 +1,65 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from './auth-context';
 import { useAuthStore } from './auth-store';
+import { SystemAPI } from '../utils/supabase/client';
 import { Button } from './ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { Badge } from './ui/badge';
+import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from './ui/pagination';
 import { Clock, Target, Plus, Trophy } from 'lucide-react';
 import { toast } from 'sonner@2.0.3';
 
-// Mock data for point reasons
+// Motivos de pontos atualizados
 const pointReasons = [
-  { id: 'xingar-henaldo', label: 'Xingar o Henaldo', points: 15 },
+  // Motivos Acadêmicos
   { id: 'avaliacao-total', label: 'Tirar total em avaliação', points: 25 },
-  { id: 'ajudar-colega', label: 'Ajudar um colega', points: 10 },
-  { id: 'participar-evento', label: 'Participar de evento', points: 8 },
+  { id: 'avaliacao-9', label: 'Tirar 9+ em avaliação', points: 15 },
+  { id: 'trabalho-excelente', label: 'Entregar trabalho excelente', points: 20 },
+  { id: 'apresentacao-aula', label: 'Fazer apresentação em aula', points: 12 },
+  { id: 'resolver-aps', label: 'Resolver APS', points: 8 },
+  { id: 'participar-aula', label: 'Participação ativa na aula', points: 5 },
+  
+  // Motivos Técnicos
   { id: 'resolver-problema', label: 'Resolver problema complexo', points: 20 },
-  { id: 'apresentacao', label: 'Fazer apresentação', points: 12 },
   { id: 'documentacao', label: 'Escrever documentação', points: 8 },
   { id: 'review-codigo', label: 'Review de código detalhado', points: 6 },
+  { id: 'bug-fix', label: 'Corrigir bug crítico', points: 15 },
+  { id: 'feature-nova', label: 'Implementar nova funcionalidade', points: 18 },
+  { id: 'otimizacao', label: 'Otimizar performance', points: 12 },
+  
+  // Motivos Sociais
+  { id: 'ajudar-colega', label: 'Ajudar um colega', points: 10 },
+  { id: 'mentoria', label: 'Dar mentoria para alguém', points: 15 },
+  { id: 'explicar-materia', label: 'Explicar matéria para a turma', points: 12 },
+  { id: 'trabalho-grupo', label: 'Liderar trabalho em grupo', points: 10 },
+  
+  // Motivos de Eventos
+  { id: 'primeiro-expotech', label: 'Primeiro Lugar na ExpoTech', points: 100 },
+  { id: 'segundo-expotech', label: 'Segundo Lugar na ExpoTech', points: 80 },
+  { id: 'terceiro-expotech', label: 'Terceiro Lugar na ExpoTech', points: 60 },
+  { id: 'participar-expotech', label: 'Participar da ExpoTech', points: 20 },
+  { id: 'hackathon-winner', label: 'Ganhar Hackathon', points: 75 },
+  { id: 'hackathon-participant', label: 'Participar de Hackathon', points: 25 },
+  { id: 'palestra', label: 'Dar palestra', points: 30 },
+  { id: 'workshop', label: 'Ministrar workshop', points: 25 },
+  { id: 'participar-evento', label: 'Participar de evento acadêmico', points: 8 },
+  
+  // Motivos Especiais/Humorísticos
+  { id: 'xingar-henaldo', label: 'Xingar o Henaldo', points: 15 },
+  { id: 'coffee-break', label: 'Organizar coffee break', points: 5 },
+  { id: 'meme-engracado', label: 'Fazer meme engraçado da turma', points: 3 },
+  { id: 'chegada-pontual', label: 'Chegar pontualmente por uma semana', points: 8 },
+  { id: 'limpar-lab', label: 'Limpar o laboratório', points: 6 },
 ];
 
-export const Dashboard: React.FC = () => {
+interface DashboardProps {
+  onNavigateToProfile?: (username: string) => void;
+}
+
+export const Dashboard: React.FC<DashboardProps> = ({ onNavigateToProfile }) => {
   const { user } = useAuth();
   const { 
     pointRecords, 
@@ -44,16 +81,20 @@ export const Dashboard: React.FC = () => {
   });
   const recordsPerPage = 10;
 
-  // Load history data
+  // Load global history data
   useEffect(() => {
-    const loadHistory = async () => {
-      if (user) {
-        const data = await getHistory(currentPage);
-        setHistoryData(data);
+    const loadGlobalHistory = async () => {
+      try {
+        const data = await SystemAPI.getGlobalHistory(currentPage, recordsPerPage);
+        if (data.success) {
+          setHistoryData(data);
+        }
+      } catch (error) {
+        console.error('Erro ao carregar histórico global:', error);
       }
     };
-    loadHistory();
-  }, [currentPage, user, getHistory]);
+    loadGlobalHistory();
+  }, [currentPage]);
 
   // Auto refresh data
   useEffect(() => {
@@ -250,7 +291,11 @@ export const Dashboard: React.FC = () => {
             <div className="space-y-3">
               {leaderboardData.length > 0 ? (
                 leaderboardData.map((user, index) => (
-                  <div key={user?.rank || index} className="flex items-center gap-3">
+                  <div 
+                    key={user?.rank || index} 
+                    className="flex items-center gap-3 cursor-pointer hover:bg-muted/50 p-2 rounded-lg transition-colors"
+                    onClick={() => onNavigateToProfile?.(user?.name)}
+                  >
                     <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
                       index === 0 ? 'bg-yellow-100 text-yellow-800' :
                       index === 1 ? 'bg-gray-100 text-gray-800' :
@@ -259,6 +304,10 @@ export const Dashboard: React.FC = () => {
                     }`}>
                       {user?.rank || index + 1}
                     </div>
+                    <Avatar className="h-8 w-8">
+                      <AvatarImage src={user?.avatar} alt={user?.name} />
+                      <AvatarFallback>{user?.name?.[0]?.toUpperCase() || 'U'}</AvatarFallback>
+                    </Avatar>
                     <div className="flex-1">
                       <p className="font-medium">{user?.name || 'Usuário'}</p>
                       <p className="text-sm text-muted-foreground">{user?.points || 0} pontos</p>
@@ -289,7 +338,7 @@ export const Dashboard: React.FC = () => {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Nome</TableHead>
+                <TableHead>Usuário</TableHead>
                 <TableHead>Data e Hora</TableHead>
                 <TableHead>Motivo</TableHead>
                 <TableHead className="text-right">Pontos</TableHead>
@@ -299,11 +348,24 @@ export const Dashboard: React.FC = () => {
               {historyData.history.length > 0 ? (
                 historyData.history.map((record) => (
                   <TableRow key={record?.id || Math.random()}>
-                    <TableCell className="font-medium">{record?.username || 'Usuário'}</TableCell>
+                    <TableCell>
+                      <div 
+                        className="flex items-center gap-3 cursor-pointer hover:text-primary transition-colors"
+                        onClick={() => onNavigateToProfile?.(record?.username)}
+                      >
+                        <Avatar className="h-8 w-8">
+                          <AvatarImage src={record?.avatar} alt={record?.username} />
+                          <AvatarFallback>{record?.username?.[0]?.toUpperCase() || 'U'}</AvatarFallback>
+                        </Avatar>
+                        <span className="font-medium">{record?.username || 'Usuário'}</span>
+                      </div>
+                    </TableCell>
                     <TableCell>
                       {record?.timestamp ? new Date(record.timestamp).toLocaleString('pt-BR') : '-'}
                     </TableCell>
-                    <TableCell>{record?.reason || '-'}</TableCell>
+                    <TableCell>
+                      {pointReasons.find(r => r.id === record?.reason)?.label || record?.reason || '-'}
+                    </TableCell>
                     <TableCell className="text-right">
                       <Badge variant="secondary">+{record?.points || 0}</Badge>
                     </TableCell>
