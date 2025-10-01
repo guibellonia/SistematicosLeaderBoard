@@ -328,10 +328,10 @@ export const Profile: React.FC<ProfileProps> = ({ section = 'profile', targetUse
                     <CardDescription className="text-sm">
                       {user?.createdAt ? `Usuário desde ${new Date(user.createdAt).toLocaleDateString('pt-BR')}` : 'Novo usuário'}
                     </CardDescription>
-                    <div className="flex flex-wrap items-center gap-2 mt-3">
-                      <Badge className="text-xs">{user?.points || 0} pontos</Badge>
-                      <Badge variant="outline" className="text-xs">Ativo</Badge>
-                      <Badge variant="secondary" className="text-xs">
+                    <div className="flex flex-col sm:flex-row sm:flex-wrap items-start sm:items-center gap-2 mt-3">
+                      <Badge className="text-xs w-fit">{user?.points || 0} pontos</Badge>
+                      <Badge variant="outline" className="text-xs w-fit">#{getLeaderboard()?.findIndex(u => u?.username === user?.username) + 1 || '?'} no ranking</Badge>
+                      <Badge variant="secondary" className="text-xs w-fit">
                         {achievements.filter(a => a.unlocked).length}/{achievements.length} conquistas
                       </Badge>
                     </div>
