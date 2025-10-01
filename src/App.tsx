@@ -60,15 +60,15 @@ const AppContent: React.FC = () => {
       case 'user-profile':
         return selectedUser ? <UserProfile targetUser={selectedUser} onBackToOwnProfile={handleBackToOwnProfile} onNavigateToProfile={handleNavigateToProfile} /> : <Dashboard onNavigateToProfile={handleNavigateToProfile} />;
       case 'profile':
-        return <Profile section="profile" />;
+        return <Profile section="profile" onNavigateToProfile={handleNavigateToProfile} />;
       case 'achievements':
-        return <Profile section="achievements" />;
+        return <Profile section="achievements" onNavigateToProfile={handleNavigateToProfile} />;
       case 'seasons':
-        return <Profile section="seasons" />;
+        return <Profile section="seasons" onNavigateToProfile={handleNavigateToProfile} />;
       case 'settings':
-        return <Profile section="settings" />;
+        return <Profile section="settings" onNavigateToProfile={handleNavigateToProfile} />;
       case 'status':
-        return <Profile section="status" />;
+        return <Profile section="status" onNavigateToProfile={handleNavigateToProfile} />;
       default:
         return <Dashboard onNavigateToProfile={handleNavigateToProfile} />;
     }

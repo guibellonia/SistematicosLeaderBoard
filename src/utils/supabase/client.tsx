@@ -125,6 +125,14 @@ export class SystemAPI {
     })
   }
 
+  // Admin - Corrigir usuários inválidos
+  static async fixInvalidUsers() {
+    console.log('🔧 Solicitando correção de usuários inválidos...')
+    return this.request('/admin/fix-invalid-users', {
+      method: 'POST'
+    })
+  }
+
   // Temporadas
   static async getCurrentSeason() {
     return this.request('/season/current')
@@ -132,6 +140,16 @@ export class SystemAPI {
 
   static async getSeasonHistory(username: string) {
     return this.request(`/season/history/${username}`, {}, true)
+  }
+
+  // Buscar temporadas finalizadas
+  static async getFinishedSeasons() {
+    return this.request('/season/finished')
+  }
+
+  // Buscar detalhes de uma temporada específica
+  static async getSeasonDetails(number: number, year: number) {
+    return this.request(`/season/${number}/${year}`)
   }
 
   // Bellonia - Finalizar temporada

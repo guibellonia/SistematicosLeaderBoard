@@ -237,6 +237,28 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigateToProfile }) => 
     }
   };
 
+  const handleFixInvalidUsers = async () => {
+    if (!confirm('🔧 ATENÇÃO: Isto irá detectar e corrigir usuários com dados inválidos no sistema. Deseja continuar?')) {
+      return;
+    }
+    
+    try {
+      console.log('🔧 Iniciando correção de usuários inválidos...');
+      const response = await SystemAPI.fixInvalidUsers();
+      if (response.success) {
+        toast.success(`✅ ${response.message}`);
+        // Refresh all data
+        await syncWithServer();
+        await loadGlobalHistory();
+      } else {
+        toast.error('❌ Erro na correção de usuários');
+      }
+    } catch (error) {
+      console.error('❌ Erro na correção:', error);
+      toast.error('❌ Erro na correção de usuários');
+    }
+  };
+
   const handleFinalizeSeason = async () => {
     if (!confirm('🏆 ATENÇÃO: Isto irá finalizar a temporada atual, atribuir vencedores e criar uma nova temporada. Esta ação não pode ser desfeita. Continuar?')) {
       return;
@@ -308,6 +330,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigateToProfile }) => 
           {/* Admin controls - mostrar apenas para admins */}
           {(user?.username === 'admin' || user?.username === 'dev' || user?.username === 'moderator') && (
             <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleFixInvalidUsers}
+                className="text-xs"
+              >
+                🔧 Corrigir Dados
+              </Button>
               <Button
                 variant="outline"
                 size="sm"

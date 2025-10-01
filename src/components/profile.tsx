@@ -3,6 +3,7 @@ import { useAuth } from './auth-context';
 import { useAuthStore } from './auth-store';
 import { SystemAPI } from '../utils/supabase/client';
 import { SystemStatus } from './system-status';
+import { SeasonWinnersModal } from './season-winners-modal';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Avatar, AvatarFallback } from './ui/avatar';
 import { Button } from './ui/button';
@@ -58,15 +59,19 @@ interface ProfileProps {
   section?: string;
   targetUser?: string | null;
   onBackToOwnProfile?: () => void;
+  onNavigateToProfile?: (username: string) => void;
 }
 
-export const Profile: React.FC<ProfileProps> = ({ section = 'profile', targetUser, onBackToOwnProfile }) => {
+export const Profile: React.FC<ProfileProps> = ({ section = 'profile', targetUser, onBackToOwnProfile, onNavigateToProfile }) => {
   const { user: currentUser, logout } = useAuth();
   const { getLeaderboard, pointRecords } = useAuthStore();
   const [activeTab, setActiveTab] = useState(section);
   const [isLoading, setIsLoading] = useState(false);
   const [user, setUser] = useState(currentUser);
   const [selectedTitleId, setSelectedTitleId] = useState<string | null>(null);
+  const [seasons, setSeasons] = useState<any[]>([]);
+  const [selectedSeason, setSelectedSeason] = useState<any | null>(null);
+  const [seasonModalOpen, setSeasonModalOpen] = useState(false);
 
   const isOwnProfile = !targetUser || targetUser === currentUser?.username;
 
@@ -125,25 +130,103 @@ export const Profile: React.FC<ProfileProps> = ({ section = 'profile', targetUse
     return calculateAchievements(userRecords, totalPoints, userRank);
   };
 
-  // Get seasons (for now, just current season)
-  const getSeasons = () => {
-    const currentYear = new Date().getFullYear();
-    return [
-      {
-        id: '1',
-        name: `Temporada ${currentYear}`,
-        period: `Jan - Dez ${currentYear}`,
-        points: user?.points || 0,
-        rank: getLeaderboard()?.findIndex(u => u?.id === user?.id) + 1 || 0,
-        status: 'atual'
+  // Load seasons data
+  useEffect(() => {
+    const loadSeasonsData = async () => {
+      try {
+        const [finishedSeasonsResponse, currentSeasonResponse, userSeasonsResponse] = await Promise.all([
+          SystemAPI.getFinishedSeasons(),
+          SystemAPI.getCurrentSeason(),
+          user?.username ? SystemAPI.getSeasonHistory(user.username) : Promise.resolve({ success: true, seasons: [] })
+        ]);
+
+        const allSeasons = [];
+
+        // Add current season
+        if (currentSeasonResponse.success && currentSeasonResponse.season) {
+          const currentRank = getLeaderboard()?.findIndex(u => u?.username === user?.username) + 1 || 0;
+          allSeasons.push({
+            id: `current-${currentSeasonResponse.season.number}`,
+            number: currentSeasonResponse.season.number,
+            year: currentSeasonResponse.season.year,
+            name: currentSeasonResponse.season.title || `Temporada ${currentSeasonResponse.season.number} ${currentSeasonResponse.season.year}`,
+            period: `${new Date(currentSeasonResponse.season.startDate).toLocaleDateString('pt-BR')} - Atual`,
+            points: user?.points || 0,
+            rank: currentRank,
+            status: 'atual',
+            startDate: currentSeasonResponse.season.startDate,
+            isFinished: false
+          });
+        }
+
+        // Add finished seasons with user data
+        if (finishedSeasonsResponse.success && finishedSeasonsResponse.seasons) {
+          for (const finishedSeason of finishedSeasonsResponse.seasons) {
+            // Find user's data for this season
+            const userSeasonData = userSeasonsResponse.success 
+              ? userSeasonsResponse.seasons.find((s: any) => s.season === finishedSeason.number && s.year === finishedSeason.year)
+              : null;
+
+            allSeasons.push({
+              id: `finished-${finishedSeason.number}-${finishedSeason.year}`,
+              number: finishedSeason.number,
+              year: finishedSeason.year,
+              name: finishedSeason.title || `Temporada ${finishedSeason.number} ${finishedSeason.year}`,
+              period: `${new Date(finishedSeason.startDate).toLocaleDateString('pt-BR')} - ${new Date(finishedSeason.endDate).toLocaleDateString('pt-BR')}`,
+              points: userSeasonData?.points || 0,
+              rank: userSeasonData?.rank || 0,
+              status: 'finalizada',
+              startDate: finishedSeason.startDate,
+              endDate: finishedSeason.endDate,
+              isFinished: true,
+              seasonData: finishedSeason // Include full season data for modal
+            });
+          }
+        }
+
+        // Sort seasons by number (most recent first)
+        allSeasons.sort((a, b) => {
+          if (a.year !== b.year) return b.year - a.year;
+          return b.number - a.number;
+        });
+
+        setSeasons(allSeasons);
+      } catch (error) {
+        console.error('Erro ao carregar temporadas:', error);
+        // Fallback to current season only
+        const currentYear = new Date().getFullYear();
+        setSeasons([
+          {
+            id: 'fallback-1',
+            number: 1,
+            year: currentYear,
+            name: `Temporada ${currentYear}`,
+            period: `Jan - Dez ${currentYear}`,
+            points: user?.points || 0,
+            rank: getLeaderboard()?.findIndex(u => u?.username === user?.username) + 1 || 0,
+            status: 'atual',
+            isFinished: false
+          }
+        ]);
       }
-    ];
+    };
+
+    if (user?.username) {
+      loadSeasonsData();
+    }
+  }, [user?.username, isOwnProfile, targetUser]);
+
+  // Handle season click
+  const handleSeasonClick = async (season: any) => {
+    if (season.isFinished && season.seasonData) {
+      setSelectedSeason(season.seasonData);
+      setSeasonModalOpen(true);
+    }
   };
 
   const achievements = getUserAchievements();
   const userTitle = getUserTitle(achievements, selectedTitleId, isOwnProfile);
   const earnedTitles = calculateEarnedTitles(achievements);
-  const seasons = getSeasons();
 
   // Update active tab when section prop changes
   React.useEffect(() => {
@@ -483,25 +566,51 @@ export const Profile: React.FC<ProfileProps> = ({ section = 'profile', targetUse
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {seasons.map((season) => (
-                  <div key={season.id} className="p-4 rounded-lg border">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h4 className="font-medium">{season.name}</h4>
-                        <p className="text-sm text-muted-foreground">{season.period}</p>
+                {seasons.length > 0 ? (
+                  seasons.map((season) => (
+                    <div 
+                      key={season.id} 
+                      className={`p-4 rounded-lg border transition-all duration-200 ${
+                        season.isFinished 
+                          ? 'cursor-pointer hover:bg-muted/50 hover:border-primary/30 hover:shadow-md' 
+                          : ''
+                      }`}
+                      onClick={() => handleSeasonClick(season)}
+                      title={season.isFinished ? 'Clique para ver os vencedores desta temporada' : ''}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <h4 className="font-medium">{season.name}</h4>
+                            {season.isFinished && (
+                              <Trophy className="h-4 w-4 text-muted-foreground" />
+                            )}
+                          </div>
+                          <p className="text-sm text-muted-foreground">{season.period}</p>
+                        </div>
+                        <div className="text-right mr-4">
+                          <p className="font-medium">{season.points} pontos</p>
+                          <p className="text-sm text-muted-foreground">
+                            Rank #{season.rank > 0 ? season.rank : '-'}
+                          </p>
+                        </div>
+                        <Badge variant={season.status === 'atual' ? 'default' : 'secondary'}>
+                          {season.status}
+                        </Badge>
                       </div>
-                      <div className="text-right">
-                        <p className="font-medium">{season.points} pontos</p>
-                        <p className="text-sm text-muted-foreground">
-                          Rank #{season.rank > 0 ? season.rank : '-'}
-                        </p>
-                      </div>
-                      <Badge variant={season.status === 'atual' ? 'default' : 'secondary'}>
-                        {season.status}
-                      </Badge>
+                      {season.isFinished && (
+                        <div className="mt-2 text-xs text-muted-foreground">
+                          💡 Clique para ver os vencedores
+                        </div>
+                      )}
                     </div>
+                  ))
+                ) : (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <Calendar className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                    <p>Carregando temporadas...</p>
                   </div>
-                ))}
+                )}
               </div>
             </CardContent>
           </Card>
@@ -644,6 +753,17 @@ export const Profile: React.FC<ProfileProps> = ({ section = 'profile', targetUse
           </TabsContent>
         )}
       </Tabs>
+
+      {/* Season Winners Modal */}
+      <SeasonWinnersModal
+        season={selectedSeason}
+        isOpen={seasonModalOpen}
+        onClose={() => setSeasonModalOpen(false)}
+        onNavigateToProfile={(username) => {
+          setSeasonModalOpen(false);
+          onNavigateToProfile?.(username);
+        }}
+      />
     </div>
   );
 };

@@ -458,7 +458,20 @@ app.get('/make-server-cc2c4d6e/users', publicMiddleware, async (c) => {
         const { password, ...userWithoutPassword } = item.value
         return userWithoutPassword
       })
-      .sort((a, b) => b.totalPoints - a.totalPoints)
+      .filter(user => {
+        // Filtrar usuários válidos
+        if (!user || !user.username || typeof user.username !== 'string' || user.username.trim() === '' || user.username === 'Usuário') {
+          console.log(`⚠️ Usuário inválido filtrado da lista: ${JSON.stringify(user)}`)
+          return false
+        }
+        // Garantir propriedades essenciais
+        if (typeof user.points !== 'number') user.points = 0
+        if (typeof user.totalPoints !== 'number') user.totalPoints = 0
+        if (!user.avatar) user.avatar = `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.username}`
+        if (!user.achievements) user.achievements = []
+        return true
+      })
+      .sort((a, b) => (b.points || 0) - (a.points || 0)) // Usar pontos da temporada atual
     
     return c.json({ success: true, users })
   } catch (error) {
@@ -529,6 +542,55 @@ app.get('/make-server-cc2c4d6e/season/history/:username', authMiddleware, async 
   }
 })
 
+// 📅 TEMPORADA - Buscar todas as temporadas finalizadas (público)
+app.get('/make-server-cc2c4d6e/season/finished', publicMiddleware, async (c) => {
+  try {
+    // Buscar todas as temporadas finalizadas no KV store
+    const seasonKeys = await kv.getByPrefix('season:')
+    const finishedSeasons = seasonKeys
+      .filter(item => item.key.includes(':') && item.key !== 'season:current')
+      .map(item => item.value)
+      .filter(season => season && season.status === 'finished')
+      .sort((a, b) => {
+        // Ordenar por número da temporada (mais recente primeiro)
+        if (a.year !== b.year) return b.year - a.year
+        return b.number - a.number
+      })
+    
+    console.log(`📅 Encontradas ${finishedSeasons.length} temporadas finalizadas`)
+    
+    return c.json({ 
+      success: true, 
+      seasons: finishedSeasons 
+    })
+  } catch (error) {
+    console.error('Erro ao buscar temporadas finalizadas:', error)
+    return c.json({ error: 'Erro interno do servidor' }, 500)
+  }
+})
+
+// 📅 TEMPORADA - Buscar detalhes de uma temporada específica (público)
+app.get('/make-server-cc2c4d6e/season/:number/:year', publicMiddleware, async (c) => {
+  try {
+    const number = c.req.param('number')
+    const year = c.req.param('year')
+    const seasonKey = `season:${number}:${year}`
+    
+    const season = await kv.get(seasonKey)
+    if (!season) {
+      return c.json({ error: 'Temporada não encontrada' }, 404)
+    }
+    
+    return c.json({ 
+      success: true, 
+      season: season 
+    })
+  } catch (error) {
+    console.error('Erro ao buscar temporada:', error)
+    return c.json({ error: 'Erro interno do servidor' }, 500)
+  }
+})
+
 // 🔄 REAL-TIME - Status do servidor (público)
 app.get('/make-server-cc2c4d6e/status', publicMiddleware, async (c) => {
   try {
@@ -550,41 +612,82 @@ app.get('/make-server-cc2c4d6e/status', publicMiddleware, async (c) => {
 // 🔄 ADMIN - Limpar usuários antigos (usuários no KV que não estão no Supabase Auth)
 app.post('/make-server-cc2c4d6e/admin/cleanup-users', publicMiddleware, async (c) => {
   try {
-    console.log('🧹 Iniciando limpeza de usuários antigos...')
+    console.log('🧹 Iniciando limpeza de usuários antigos e inválidos...')
     
     const userKeys = await kv.getByPrefix('user:')
     const usersToCheck = userKeys.filter(item => !item.key.includes('user:id:'))
     
     let usersRemoved = 0
     let usersKept = 0
+    let invalidUsersRemoved = 0
     
     for (const userItem of usersToCheck) {
       const user = userItem.value
-      if (user && user.username) {
-        try {
-          // Verificar se o usuário existe no Supabase Auth
-          const email = `${user.username}@sistematics.local`
-          const { data, error } = await supabase.auth.admin.getUserByEmail(email)
-          
-          if (error || !data.user) {
-            // Usuário não existe no Supabase Auth, remover do KV
-            console.log(`🗑️ Removendo usuário antigo: ${user.username}`)
-            await kv.del(`user:${user.username}`)
-            if (user.id) {
-              await kv.del(`user:id:${user.id}`)
-            }
-            // Remover histórico também
-            await kv.del(`history:${user.username}`)
-            usersRemoved++
-          } else {
-            console.log(`✅ Mantendo usuário válido: ${user.username}`)
-            usersKept++
+      
+      // Verificar se o usuário tem dados válidos
+      if (!user || !user.username || typeof user.username !== 'string' || user.username.trim() === '' || user.username === 'Usuário') {
+        console.log(`🗑️ Removendo usuário inválido: ${JSON.stringify(user)}`)
+        await kv.del(userItem.key)
+        if (user?.id) {
+          await kv.del(`user:id:${user.id}`)
+        }
+        if (user?.username) {
+          await kv.del(`history:${user.username}`)
+          await kv.del(`user:${user.username}:seasons`)
+        }
+        invalidUsersRemoved++
+        usersRemoved++
+        continue
+      }
+      
+      try {
+        // Verificar se o usuário existe no Supabase Auth
+        const email = `${user.username}@sistematics.local`
+        const { data, error } = await supabase.auth.admin.getUserByEmail(email)
+        
+        if (error || !data.user) {
+          // Usuário não existe no Supabase Auth, remover do KV
+          console.log(`🗑️ Removendo usuário órfão: ${user.username}`)
+          await kv.del(`user:${user.username}`)
+          if (user.id) {
+            await kv.del(`user:id:${user.id}`)
           }
-        } catch (checkError) {
-          console.error(`❌ Erro ao verificar usuário ${user.username}:`, checkError)
-          // Em caso de dúvida, manter o usuário
+          // Remover histórico também
+          await kv.del(`history:${user.username}`)
+          await kv.del(`user:${user.username}:seasons`)
+          usersRemoved++
+        } else {
+          // Verificar e corrigir dados do usuário válido
+          let needsUpdate = false
+          if (typeof user.points !== 'number') {
+            user.points = 0
+            needsUpdate = true
+          }
+          if (typeof user.totalPoints !== 'number') {
+            user.totalPoints = 0
+            needsUpdate = true
+          }
+          if (!user.avatar) {
+            user.avatar = `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.username}`
+            needsUpdate = true
+          }
+          if (!user.achievements) {
+            user.achievements = []
+            needsUpdate = true
+          }
+          
+          if (needsUpdate) {
+            await kv.set(`user:${user.username}`, user)
+            console.log(`🔧 Corrigindo dados do usuário: ${user.username}`)
+          }
+          
+          console.log(`✅ Mantendo usuário válido: ${user.username}`)
           usersKept++
         }
+      } catch (checkError) {
+        console.error(`❌ Erro ao verificar usuário ${user.username}:`, checkError)
+        // Em caso de dúvida, manter o usuário se tiver dados válidos
+        usersKept++
       }
     }
     
@@ -595,22 +698,25 @@ app.post('/make-server-cc2c4d6e/admin/cleanup-users', publicMiddleware, async (c
     const remainingUsers = await kv.getByPrefix('user:')
     const validUsernames = remainingUsers
       .filter(item => !item.key.includes('user:id:'))
-      .map(item => item.value.username)
+      .map(item => item.value)
+      .filter(user => user && user.username && typeof user.username === 'string' && user.username.trim() !== '')
+      .map(user => user.username)
     
     const currentGlobalHistory = await kv.get('history:global') || []
     const cleanedGlobalHistory = currentGlobalHistory.filter(record => 
-      validUsernames.includes(record.username)
+      record && record.username && validUsernames.includes(record.username)
     )
     
     await kv.set('history:global', cleanedGlobalHistory)
     
-    console.log(`🏁 Limpeza concluída! ${usersRemoved} usuários removidos, ${usersKept} usuários mantidos`)
+    console.log(`🏁 Limpeza concluída! ${usersRemoved} usuários removidos (${invalidUsersRemoved} inválidos), ${usersKept} usuários mantidos`)
     
     return c.json({
       success: true,
-      message: `Limpeza concluída! ${usersRemoved} usuários antigos removidos, ${usersKept} usuários válidos mantidos`,
+      message: `Limpeza concluída! ${usersRemoved} usuários removidos (${invalidUsersRemoved} eram dados inválidos), ${usersKept} usuários válidos mantidos`,
       usersRemoved,
       usersKept,
+      invalidUsersRemoved,
       timestamp: new Date().toISOString()
     })
   } catch (error) {
@@ -730,6 +836,88 @@ app.post('/make-server-cc2c4d6e/admin/finalize-season', authMiddleware, async (c
   }
 })
 
+// 🔄 ADMIN - Detectar e limpar usuários inválidos automaticamente
+app.post('/make-server-cc2c4d6e/admin/fix-invalid-users', publicMiddleware, async (c) => {
+  try {
+    console.log('🔧 Detectando e corrigindo usuários inválidos...')
+    
+    const userKeys = await kv.getByPrefix('user:')
+    const usersToCheck = userKeys.filter(item => !item.key.includes('user:id:'))
+    
+    let invalidUsersFixed = 0
+    let invalidUsersRemoved = 0
+    
+    for (const userItem of usersToCheck) {
+      const user = userItem.value
+      
+      // Verificar se o usuário tem dados inválidos
+      if (!user || !user.username || typeof user.username !== 'string' || user.username.trim() === '' || user.username === 'Usuário') {
+        console.log(`🗑️ Removendo usuário completamente inválido: ${JSON.stringify(user)}`)
+        await kv.del(userItem.key)
+        if (user?.id) {
+          await kv.del(`user:id:${user.id}`)
+        }
+        if (user?.username) {
+          await kv.del(`history:${user.username}`)
+          await kv.del(`user:${user.username}:seasons`)
+        }
+        invalidUsersRemoved++
+        continue
+      }
+      
+      // Corrigir dados parcialmente inválidos
+      let needsUpdate = false
+      
+      if (typeof user.points !== 'number') {
+        user.points = 0
+        needsUpdate = true
+      }
+      if (typeof user.totalPoints !== 'number') {
+        user.totalPoints = 0
+        needsUpdate = true
+      }
+      if (typeof user.rank !== 'number' || user.rank < 1) {
+        user.rank = 1
+        needsUpdate = true
+      }
+      if (!user.avatar || typeof user.avatar !== 'string') {
+        user.avatar = `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.username}`
+        needsUpdate = true
+      }
+      if (!Array.isArray(user.achievements)) {
+        user.achievements = []
+        needsUpdate = true
+      }
+      if (!user.joinedAt) {
+        user.joinedAt = user.createdAt || new Date().toISOString()
+        needsUpdate = true
+      }
+      
+      if (needsUpdate) {
+        await kv.set(`user:${user.username}`, user)
+        console.log(`🔧 Corrigido usuário: ${user.username}`)
+        invalidUsersFixed++
+      }
+    }
+    
+    // Atualizar leaderboard após correções
+    await updateLeaderboard()
+    
+    console.log(`🏁 Correção concluída! ${invalidUsersFixed} usuários corrigidos, ${invalidUsersRemoved} usuários inválidos removidos`)
+    
+    return c.json({
+      success: true,
+      message: `Correção concluída! ${invalidUsersFixed} usuários corrigidos, ${invalidUsersRemoved} usuários inválidos removidos`,
+      invalidUsersFixed,
+      invalidUsersRemoved,
+      timestamp: new Date().toISOString()
+    })
+  } catch (error) {
+    console.error('Erro na correção de usuários inválidos:', error)
+    return c.json({ error: 'Erro interno do servidor' }, 500)
+  }
+})
+
 // 🔄 ADMIN - Reset de temporada (resetar pontos de todos os usuários)
 app.post('/make-server-cc2c4d6e/admin/reset-season', publicMiddleware, async (c) => {
   try {
@@ -820,7 +1008,20 @@ async function updateLeaderboard() {
         const { password, ...userWithoutPassword } = item.value
         return userWithoutPassword
       })
-      .sort((a, b) => (b.totalPoints || 0) - (a.totalPoints || 0)) // Corrigido: usar totalPoints
+      .filter(user => {
+        // Validar se o usuário tem dados válidos
+        if (!user || !user.username || typeof user.username !== 'string' || user.username.trim() === '') {
+          console.log(`⚠️ Usuário inválido removido do leaderboard: ${JSON.stringify(user)}`)
+          return false
+        }
+        // Validar se tem propriedades essenciais
+        if (typeof user.points !== 'number') user.points = 0
+        if (typeof user.totalPoints !== 'number') user.totalPoints = 0
+        if (!user.avatar) user.avatar = `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.username}`
+        if (!user.achievements) user.achievements = []
+        return true
+      })
+      .sort((a, b) => (b.points || 0) - (a.points || 0)) // Usar pontos da temporada atual
       .map((user, index) => ({
         ...user,
         rank: index + 1
@@ -837,7 +1038,7 @@ async function updateLeaderboard() {
       }
     }
     
-    console.log(`🏆 Leaderboard atualizado com ${users.length} usuários`)
+    console.log(`🏆 Leaderboard atualizado com ${users.length} usuários válidos`)
   } catch (error) {
     console.error('Erro ao atualizar leaderboard:', error)
   }
