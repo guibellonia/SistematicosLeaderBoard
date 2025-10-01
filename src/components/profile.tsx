@@ -308,35 +308,38 @@ export const Profile: React.FC<ProfileProps> = ({ section = 'profile', targetUse
           
           <Card>
             <CardHeader>
-              <div className="flex items-center gap-4">
-                <Avatar className="w-16 h-16">
-                  <AvatarFallback className="text-lg">{user?.username?.charAt(0)?.toUpperCase() || 'U'}</AvatarFallback>
-                </Avatar>
-                <div className="flex-1">
-                  <CardTitle>{user?.username || 'Usuário'}</CardTitle>
-                  <div className="my-2">
-                    <Badge className={`${userTitle.color} text-white font-semibold text-sm px-3 py-1 shadow-lg`}>
-                      {userTitle.title}
-                    </Badge>
-                  </div>
-                  <CardDescription>
-                    {user?.createdAt ? `Usuário desde ${new Date(user.createdAt).toLocaleDateString('pt-BR')}` : 'Novo usuário'}
-                  </CardDescription>
-                  <div className="flex items-center gap-2 mt-2">
-                    <Badge>{user?.points || 0} pontos</Badge>
-                    <Badge variant="outline">Ativo</Badge>
-                    <Badge variant="secondary">
-                      {achievements.filter(a => a.unlocked).length}/{achievements.length} conquistas
-                    </Badge>
+              <div className="flex flex-col gap-4">
+                <div className="flex items-start gap-4">
+                  <Avatar className="w-16 h-16">
+                    <AvatarFallback className="text-lg">{user?.username?.charAt(0)?.toUpperCase() || 'U'}</AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1 min-w-0">
+                    <CardTitle className="truncate">{user?.username || 'Usuário'}</CardTitle>
+                    <div className="my-2">
+                      <Badge className={`${userTitle.color} text-white font-semibold text-sm px-3 py-1 shadow-lg`}>
+                        {userTitle.title}
+                      </Badge>
+                    </div>
+                    <CardDescription className="text-sm">
+                      {user?.createdAt ? `Usuário desde ${new Date(user.createdAt).toLocaleDateString('pt-BR')}` : 'Novo usuário'}
+                    </CardDescription>
+                    <div className="flex flex-wrap items-center gap-2 mt-3">
+                      <Badge className="text-xs">{user?.points || 0} pontos</Badge>
+                      <Badge variant="outline" className="text-xs">Ativo</Badge>
+                      <Badge variant="secondary" className="text-xs">
+                        {achievements.filter(a => a.unlocked).length}/{achievements.length} conquistas
+                      </Badge>
+                    </div>
                   </div>
                 </div>
                 {isOwnProfile && (
                   <Button
                     variant="outline"
                     onClick={() => setEditingProfile(!editingProfile)}
+                    className="w-full sm:w-auto sm:self-start"
                   >
                     <Edit3 className="h-4 w-4 mr-2" />
-                    {editingProfile ? 'Cancelar' : 'Editar'}
+                    {editingProfile ? 'Cancelar Edição' : 'Editar Perfil'}
                   </Button>
                 )}
               </div>

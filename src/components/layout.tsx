@@ -3,7 +3,7 @@ import { useAuth } from './auth-context';
 import { Button } from './ui/button';
 import { Sheet, SheetContent, SheetTrigger } from './ui/sheet';
 import { Avatar, AvatarFallback } from './ui/avatar';
-import { NetworkInfo } from './network-info';
+
 import { 
   Home, 
   User, 
@@ -12,8 +12,7 @@ import {
   Calendar,
   LogOut,
   Menu,
-  Target,
-  Wifi
+  Target
 } from 'lucide-react';
 
 interface LayoutProps {
@@ -34,7 +33,6 @@ const sidebarItems = [
 export const Layout: React.FC<LayoutProps> = ({ children, currentPage, onNavigate }) => {
   const { user, logout } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [showNetworkInfo, setShowNetworkInfo] = useState(false);
 
   const SidebarContent = () => (
     <div className="flex flex-col h-full">
@@ -84,14 +82,6 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, onNavigat
         </div>
         <div className="space-y-2">
           <Button
-            variant="ghost"
-            className="w-full gap-2"
-            onClick={() => setShowNetworkInfo(true)}
-          >
-            <Wifi className="h-4 w-4" />
-            Rede LAN
-          </Button>
-          <Button
             variant="outline"
             className="w-full gap-2"
             onClick={logout}
@@ -135,11 +125,6 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, onNavigat
           {children}
         </main>
       </div>
-
-      {/* Network Info Modal */}
-      {showNetworkInfo && (
-        <NetworkInfo onClose={() => setShowNetworkInfo(false)} />
-      )}
     </div>
   );
 };

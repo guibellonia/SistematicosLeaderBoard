@@ -80,25 +80,25 @@ export const SeasonWinnersModal: React.FC<SeasonWinnersModalProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto mx-4 sm:mx-auto">
-        <DialogHeader className="pb-4">
-          <DialogTitle className="flex items-center gap-2 text-lg">
-            <Trophy className="h-5 w-5 text-primary" />
-            {season.title || `Temporada ${season.number} ${season.year}`}
+      <DialogContent className="max-w-[95vw] sm:max-w-2xl max-h-[90vh] overflow-y-auto mx-2 sm:mx-auto">
+        <DialogHeader className="pb-3 px-1">
+          <DialogTitle className="flex items-center gap-2 text-base md:text-lg">
+            <Trophy className="h-4 w-4 md:h-5 md:w-5 text-primary" />
+            <span className="truncate">{season.title || `Temporada ${season.number} ${season.year}`}</span>
           </DialogTitle>
-          <DialogDescription className="text-sm">
+          <DialogDescription className="text-xs md:text-sm">
             Finalizada em {new Date(season.endDate).toLocaleDateString('pt-BR')} • {season.totalUsers} participantes
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 pb-2">
+        <div className="space-y-3 md:space-y-4 pb-2 px-1">
           {/* Pódio Visual */}
           <Card>
-            <CardContent className="p-4 md:p-6">
+            <CardContent className="p-3 md:p-6">
               <h4 className="text-center mb-4 md:mb-6 font-semibold text-sm md:text-base">🏆 Pódio da Temporada</h4>
               
               {winnersArray.length >= 3 ? (
-                <div className="grid grid-cols-3 gap-2 md:gap-4">
+                <div className="grid grid-cols-3 gap-1 md:gap-4">
                   {/* 2º Lugar */}
                   <div className="text-center order-1">
                     <div className="relative">
@@ -109,7 +109,7 @@ export const SeasonWinnersModal: React.FC<SeasonWinnersModalProps> = ({
                         <AvatarFallback className="text-xs md:text-sm">{winners.second?.username?.charAt(0)?.toUpperCase() || '2'}</AvatarFallback>
                       </Avatar>
                     </div>
-                    <p className="font-medium mt-2 text-xs md:text-sm truncate px-1">{winners.second?.username || 'N/A'}</p>
+                    <p className="font-medium mt-2 text-xs md:text-sm truncate px-0.5">{winners.second?.username || 'N/A'}</p>
                     <p className="text-xs text-muted-foreground">{winners.second?.points || 0} pts</p>
                     <Badge className="mt-1 bg-gray-100 text-gray-800 text-xs py-0">2º</Badge>
                   </div>
@@ -124,7 +124,7 @@ export const SeasonWinnersModal: React.FC<SeasonWinnersModalProps> = ({
                         <AvatarFallback className="text-xs md:text-sm">{winners.first?.username?.charAt(0)?.toUpperCase() || '1'}</AvatarFallback>
                       </Avatar>
                     </div>
-                    <p className="font-medium mt-2 text-xs md:text-sm truncate px-1">{winners.first?.username || 'N/A'}</p>
+                    <p className="font-medium mt-2 text-xs md:text-sm truncate px-0.5">{winners.first?.username || 'N/A'}</p>
                     <p className="text-xs text-muted-foreground">{winners.first?.points || 0} pts</p>
                     <Badge className="mt-1 bg-yellow-100 text-yellow-800 text-xs py-0">🥇</Badge>
                   </div>
@@ -139,13 +139,13 @@ export const SeasonWinnersModal: React.FC<SeasonWinnersModalProps> = ({
                         <AvatarFallback className="text-xs md:text-sm">{winners.third?.username?.charAt(0)?.toUpperCase() || '3'}</AvatarFallback>
                       </Avatar>
                     </div>
-                    <p className="font-medium mt-2 text-xs md:text-sm truncate px-1">{winners.third?.username || 'N/A'}</p>
+                    <p className="font-medium mt-2 text-xs md:text-sm truncate px-0.5">{winners.third?.username || 'N/A'}</p>
                     <p className="text-xs text-muted-foreground">{winners.third?.points || 0} pts</p>
                     <Badge className="mt-1 bg-orange-100 text-orange-800 text-xs py-0">3º</Badge>
                   </div>
                 </div>
               ) : (
-                <div className="flex justify-center items-end gap-2 md:gap-4">
+                <div className="flex justify-center items-end gap-1 md:gap-4">
                   {winnersArray.map((winner) => (
                     <div key={winner.position} className="text-center">
                       <div className="relative">
@@ -160,7 +160,7 @@ export const SeasonWinnersModal: React.FC<SeasonWinnersModalProps> = ({
                           <AvatarFallback className="text-xs md:text-sm">{winner.data?.username?.charAt(0)?.toUpperCase() || winner.position}</AvatarFallback>
                         </Avatar>
                       </div>
-                      <p className="font-medium mt-2 text-xs md:text-sm truncate px-1">{winner.data?.username || 'N/A'}</p>
+                      <p className="font-medium mt-2 text-xs md:text-sm truncate px-0.5">{winner.data?.username || 'N/A'}</p>
                       <p className="text-xs text-muted-foreground">{winner.data?.points || 0} pts</p>
                       {winner.position === 1 && <Badge className="mt-1 bg-yellow-100 text-yellow-800 text-xs py-0">🥇</Badge>}
                       {winner.position === 2 && <Badge className="mt-1 bg-gray-100 text-gray-800 text-xs py-0">🥈</Badge>}
@@ -174,7 +174,7 @@ export const SeasonWinnersModal: React.FC<SeasonWinnersModalProps> = ({
 
           {/* Detalhes dos Vencedores */}
           <Card>
-            <CardContent className="p-4 md:p-6">
+            <CardContent className="p-3 md:p-6">
               <h4 className="mb-3 md:mb-4 font-semibold text-sm md:text-base">📊 Detalhes dos Vencedores</h4>
               <div className="space-y-2 md:space-y-3">
                 {winnersArray.map((winner) => (
