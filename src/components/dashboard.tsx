@@ -11,6 +11,7 @@ import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from './ui/pagination';
 import { Clock, Target, Plus, Trophy } from 'lucide-react';
 import { toast } from 'sonner@2.0.3';
+import { UserCard } from './user-card';
 
 // Motivos de pontos atualizados
 const pointReasons = [
@@ -74,6 +75,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigateToProfile }) => 
   } = useAuthStore();
   const [selectedReason, setSelectedReason] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
+  const [isAddingPoint, setIsAddingPoint] = useState(false);
   const [historyData, setHistoryData] = useState<{ history: any[]; total: number; totalPages: number }>({
     history: [],
     total: 0,
@@ -81,18 +83,37 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigateToProfile }) => 
   });
   const recordsPerPage = 10;
 
-  // Load global history data
-  useEffect(() => {
-    const loadGlobalHistory = async () => {
-      try {
-        const data = await SystemAPI.getGlobalHistory(currentPage, recordsPerPage);
-        if (data.success) {
-          setHistoryData(data);
-        }
-      } catch (error) {
-        console.error('Erro ao carregar histórico global:', error);
+  // Load global history data and users info
+  const loadGlobalHistory = async () => {
+    try {
+      const [historyResponse, usersResponse] = await Promise.all([
+        SystemAPI.getGlobalHistory(currentPage, recordsPerPage),
+        SystemAPI.getUsers()
+      ]);
+      
+      if (historyResponse.success) {
+        // Enrich history data with user info from /users endpoint
+        const enrichedHistory = historyResponse.history.map(record => {
+          const userInfo = usersResponse.users?.find(u => u.username === record.username);
+          return {
+            ...record,
+            avatar: userInfo?.avatar || record.avatar,
+            userPoints: userInfo?.points || 0,
+            userRank: userInfo?.rank || 0
+          };
+        });
+        
+        setHistoryData({
+          ...historyResponse,
+          history: enrichedHistory
+        });
       }
-    };
+    } catch (error) {
+      console.error('Erro ao carregar histórico global:', error);
+    }
+  };
+
+  useEffect(() => {
     loadGlobalHistory();
   }, [currentPage]);
 
@@ -136,17 +157,65 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigateToProfile }) => 
     
     const reason = pointReasons.find(r => r.id === selectedReason);
     if (reason) {
+      setIsAddingPoint(true);
       try {
+        console.log(`🎯 Registrando ponto: ${reason.label} (+${reason.points})`);
         await addPointRecord(reason.label, reason.points);
         toast.success(`Ponto registrado! +${reason.points} pontos por "${reason.label}"`);
         setSelectedReason('');
         
-        // Refresh history
-        const data = await getHistory(currentPage);
-        setHistoryData(data);
+        // Refresh global history instead of individual history
+        await loadGlobalHistory();
       } catch (error) {
+        console.error('❌ Erro ao registrar ponto:', error);
         toast.error('Erro ao registrar ponto. Tente novamente.');
+      } finally {
+        setIsAddingPoint(false);
       }
+    }
+  };
+
+  const handleResetSeason = async () => {
+    if (!confirm('⚠️ ATENÇÃO: Isto irá zerar os pontos de TODOS os usuários na temporada atual. Esta ação não pode ser desfeita. Continuar?')) {
+      return;
+    }
+    
+    try {
+      console.log('🔄 Iniciando reset da temporada...');
+      const response = await SystemAPI.resetSeason();
+      if (response.success) {
+        toast.success(`✅ ${response.message}`);
+        // Refresh all data
+        await syncWithServer();
+        await loadGlobalHistory();
+      } else {
+        toast.error('❌ Erro ao resetar temporada');
+      }
+    } catch (error) {
+      console.error('❌ Erro no reset:', error);
+      toast.error('❌ Erro ao resetar temporada');
+    }
+  };
+
+  const handleCleanupUsers = async () => {
+    if (!confirm('🧹 ATENÇÃO: Isto irá remover usuários antigos que não estão no sistema de autenticação. Deseja continuar?')) {
+      return;
+    }
+    
+    try {
+      console.log('🧹 Iniciando limpeza de usuários...');
+      const response = await SystemAPI.cleanupUsers();
+      if (response.success) {
+        toast.success(`✅ ${response.message}`);
+        // Refresh all data
+        await syncWithServer();
+        await loadGlobalHistory();
+      } else {
+        toast.error('❌ Erro na limpeza de usuários');
+      }
+    } catch (error) {
+      console.error('❌ Erro na limpeza:', error);
+      toast.error('❌ Erro na limpeza de usuários');
     }
   };
 
@@ -169,9 +238,32 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigateToProfile }) => 
             Bem-vindo de volta, {user?.username}!
           </p>
         </div>
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Clock className="h-4 w-4" />
-          {currentDateTime}
+        <div className="flex items-center gap-4">
+          {/* Admin controls - mostrar apenas para admins */}
+          {(user?.username === 'admin' || user?.username === 'dev' || user?.username === 'moderator') && (
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleCleanupUsers}
+                className="text-xs"
+              >
+                🧹 Limpar Usuários
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={handleResetSeason}
+                className="text-xs"
+              >
+                🔄 Reset Temporada
+              </Button>
+            </div>
+          )}
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Clock className="h-4 w-4" />
+            {currentDateTime}
+          </div>
         </div>
       </div>
 
@@ -272,9 +364,18 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigateToProfile }) => 
               <p>Usuário: {user?.username}</p>
             </div>
             
-            <Button onClick={handleRegisterPoint} className="w-full">
-              <Plus className="h-4 w-4 mr-2" />
-              Registrar Ponto
+            <Button onClick={handleRegisterPoint} className="w-full" disabled={isAddingPoint || !selectedReason}>
+              {isAddingPoint ? (
+                <>
+                  <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full mr-2"></div>
+                  Registrando...
+                </>
+              ) : (
+                <>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Registrar Ponto
+                </>
+              )}
             </Button>
           </CardContent>
         </Card>
@@ -291,29 +392,17 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigateToProfile }) => 
             <div className="space-y-3">
               {leaderboardData.length > 0 ? (
                 leaderboardData.map((user, index) => (
-                  <div 
-                    key={user?.rank || index} 
-                    className="flex items-center gap-3 cursor-pointer hover:bg-muted/50 p-2 rounded-lg transition-colors"
+                  <UserCard
+                    key={user?.rank || index}
+                    user={{
+                      username: user?.name || 'Usuário',
+                      points: user?.points || 0,
+                      rank: user?.rank || index + 1,
+                      avatar: user?.avatar
+                    }}
                     onClick={() => onNavigateToProfile?.(user?.name)}
-                  >
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
-                      index === 0 ? 'bg-yellow-100 text-yellow-800' :
-                      index === 1 ? 'bg-gray-100 text-gray-800' :
-                      index === 2 ? 'bg-orange-100 text-orange-800' :
-                      'bg-muted text-muted-foreground'
-                    }`}>
-                      {user?.rank || index + 1}
-                    </div>
-                    <Avatar className="h-8 w-8">
-                      <AvatarImage src={user?.avatar} alt={user?.name} />
-                      <AvatarFallback>{user?.name?.[0]?.toUpperCase() || 'U'}</AvatarFallback>
-                    </Avatar>
-                    <div className="flex-1">
-                      <p className="font-medium">{user?.name || 'Usuário'}</p>
-                      <p className="text-sm text-muted-foreground">{user?.points || 0} pontos</p>
-                    </div>
-
-                  </div>
+                    className="mb-2"
+                  />
                 ))
               ) : (
                 <div className="text-center text-muted-foreground py-4">
@@ -329,9 +418,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigateToProfile }) => 
       {/* Point Records Table */}
       <Card>
         <CardHeader>
-          <CardTitle>Registros Recentes</CardTitle>
+          <CardTitle>Atividade Global</CardTitle>
           <CardDescription>
-            Últimos pontos registrados por todos os usuários
+            Acompanhe em tempo real todos os usuários que estão registrando pontos
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -357,7 +446,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigateToProfile }) => 
                           <AvatarImage src={record?.avatar} alt={record?.username} />
                           <AvatarFallback>{record?.username?.[0]?.toUpperCase() || 'U'}</AvatarFallback>
                         </Avatar>
-                        <span className="font-medium">{record?.username || 'Usuário'}</span>
+                        <div className="flex-1">
+                          <div className="font-medium">{record?.username || 'Usuário'}</div>
+                          <div className="text-sm text-muted-foreground">
+                            {record?.userPoints ? `${record.userPoints} pts • #${record.userRank || '-'}` : 'Novo usuário'}
+                          </div>
+                        </div>
                       </div>
                     </TableCell>
                     <TableCell>

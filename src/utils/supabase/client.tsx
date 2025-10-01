@@ -8,28 +8,27 @@ export const supabase = createClient(
 
 export const API_BASE_URL = `https://${projectId}.supabase.co/functions/v1/make-server-cc2c4d6e`
 
-// Função para obter token de sessão
-function getSessionToken(): string | null {
-  try {
-    const sessionData = sessionStorage.getItem('sistematics-session');
-    if (sessionData) {
-      const session = JSON.parse(sessionData);
-      return session.token || null;
-    }
-  } catch (error) {
-    console.error('Erro ao obter token de sessão:', error);
-  }
-  return null;
-}
-
-// Classe para fazer requisições para o backend
+// Classe para fazer requisições para o backend usando Supabase Auth
 export class SystemAPI {
   private static async request(endpoint: string, options: RequestInit = {}, requireAuth: boolean = false) {
     const url = `${API_BASE_URL}${endpoint}`
     
-    // Usar token de sessão se disponível e necessário, senão usar chave pública
-    const token = requireAuth ? getSessionToken() : null;
-    const authHeader = token ? `Bearer ${token}` : `Bearer ${publicAnonKey}`;
+    let authHeader = `Bearer ${publicAnonKey}` // Default para endpoints públicos
+    
+    if (requireAuth) {
+      // Obter sessão atual do Supabase
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session?.access_token) {
+        authHeader = `Bearer ${session.access_token}`
+        console.log(`🔑 Usando token JWT do Supabase: ${session.access_token.substring(0, 20)}...`)
+      } else {
+        console.error('❌ Nenhuma sessão ativa encontrada para endpoint que requer auth')
+        throw new Error('Sessão não encontrada. Faça login novamente.')
+      }
+    }
+    
+    console.log(`📡 Requisição: ${options.method || 'GET'} ${endpoint}`)
+    console.log(`🔒 Require Auth: ${requireAuth}`)
     
     const response = await fetch(url, {
       ...options,
@@ -40,36 +39,37 @@ export class SystemAPI {
       },
     })
 
+    console.log(`📡 Resposta: ${response.status} ${response.statusText}`)
+
     if (!response.ok) {
       const error = await response.json().catch(() => ({ error: 'Erro de rede' }))
+      console.error(`❌ Erro na requisição:`, error)
       throw new Error(error.error || `HTTP ${response.status}`)
     }
 
-    return response.json()
+    const result = await response.json()
+    console.log(`✅ Sucesso na requisição:`, result)
+    return result
   }
 
   // Auth
   static async register(username: string, password: string) {
-    return this.request('/auth/register', {
+    console.log(`🔑 Registrando usuário: ${username}`)
+    const result = await this.request('/auth/register', {
       method: 'POST',
       body: JSON.stringify({ username, password }),
     })
-  }
-
-  static async login(username: string, password: string) {
-    return this.request('/auth/login', {
-      method: 'POST',
-      body: JSON.stringify({ username, password }),
-    })
+    console.log(`🔑 Resultado do registro:`, result)
+    return result
   }
 
   // Pontos
-  static async addPoint(username: string, reason: string, points: number) {
-    console.log(`📤 Enviando ponto para servidor: ${username}, ${reason}, ${points}`)
+  static async addPoint(reason: string, points: number) {
+    console.log(`📤 Enviando ponto para servidor: ${reason}, ${points}`)
     const result = await this.request('/points/add', {
       method: 'POST',
-      body: JSON.stringify({ username, reason, points }),
-    })
+      body: JSON.stringify({ reason, points }),
+    }, true) // Requer autenticação
     console.log(`📥 Resposta do servidor:`, result)
     return result
   }
@@ -101,35 +101,28 @@ export class SystemAPI {
 
   // Perfil de usuário (precisa de auth para ver outros perfis)
   static async getUserProfile(username: string) {
-    return this.request(`/users/${username}`, {}, true)
-  }
-
-  // Amizades
-  static async getFriends(username: string) {
-    return this.request(`/friends/${username}`, {}, true)
-  }
-
-  static async getFriendRequests(username: string) {
-    return this.request(`/friends/requests/${username}`, {}, true)
-  }
-
-  static async sendFriendRequest(fromUsername: string, toUsername: string) {
-    return this.request('/friends/request', {
-      method: 'POST',
-      body: JSON.stringify({ fromUsername, toUsername }),
-    }, true)
-  }
-
-  static async respondFriendRequest(username: string, requestId: string, accept: boolean) {
-    return this.request('/friends/respond', {
-      method: 'POST',
-      body: JSON.stringify({ username, requestId, accept }),
-    }, true)
+    return this.request(`/user/${username}`, {}, true)
   }
 
   // Status
   static async getStatus() {
     return this.request('/status')
+  }
+
+  // Admin - Reset da temporada
+  static async resetSeason() {
+    console.log('🔄 Solicitando reset da temporada...')
+    return this.request('/admin/reset-season', {
+      method: 'POST'
+    })
+  }
+
+  // Admin - Limpeza de usuários antigos
+  static async cleanupUsers() {
+    console.log('🧹 Solicitando limpeza de usuários antigos...')
+    return this.request('/admin/cleanup-users', {
+      method: 'POST'
+    })
   }
 }
 

@@ -43,138 +43,287 @@ const supabase = createClient<Database>(
 // Middleware para logging
 app.use('*', logger(console.log))
 
-// Middleware para autenticação
+// Middleware para autenticação usando Supabase JWT
 async function authMiddleware(c: any, next: any) {
   const authHeader = c.req.header('Authorization')
+  const endpoint = c.req.path
+  
+  console.log(`🔐 Middleware auth - Endpoint: ${endpoint}, Auth Header: ${authHeader ? 'presente' : 'ausente'}`)
   
   if (!authHeader) {
+    console.log(`❌ Sem header de autorização para ${endpoint}`)
     return c.json({ code: 401, message: 'Token de autorização necessário' }, 401)
+  }
+
+  const token = authHeader.replace('Bearer ', '')
+  console.log(`🔐 Token JWT recebido: ${token.substring(0, 20)}...`)
+  
+  try {
+    // Verificar o JWT com Supabase
+    const { data: { user }, error } = await supabase.auth.getUser(token)
+    
+    if (error || !user) {
+      console.log(`❌ Token JWT inválido: ${error?.message || 'Usuário não encontrado'}`)
+      return c.json({ code: 401, message: 'Invalid JWT' }, 401)
+    }
+
+    console.log(`✅ JWT válido para usuário: ${user.id}`)
+    
+    // Extrair username do email ou metadata
+    const email = user.email || ''
+    const username = user.user_metadata?.username || email.split('@')[0]
+    
+    console.log(`🔍 Buscando dados do usuário: ${username}`)
+    
+    // Buscar dados do usuário no nosso sistema
+    let userData = await kv.get(`user:${username}`)
+    
+    if (!userData) {
+      // Se o usuário não existe no nosso sistema, criar
+      console.log(`📝 Criando novo usuário no sistema: ${username}`)
+      userData = {
+        id: user.id,
+        username: username,
+        points: 0,
+        totalPoints: 0,
+        rank: 1,
+        achievements: [],
+        avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${username}`,
+        joinedAt: new Date().toISOString(),
+        createdAt: user.created_at,
+      }
+      
+      await kv.set(`user:${username}`, userData)
+      await kv.set(`user:id:${user.id}`, username)
+      
+      // Atualizar leaderboard
+      await updateLeaderboard()
+    }
+    
+    console.log(`✅ Autenticação bem-sucedida para: ${userData.username}`)
+    c.set('currentUser', userData)
+    c.set('isAuthenticated', true)
+    c.set('supabaseUser', user)
+    await next()
+    return
+  } catch (error) {
+    console.error(`❌ Erro na verificação do JWT:`, error)
+    return c.json({ code: 401, message: 'Invalid JWT' }, 401)
+  }
+}
+
+// Middleware para endpoints públicos (permite token público ou JWT)
+async function publicMiddleware(c: any, next: any) {
+  const authHeader = c.req.header('Authorization')
+  const endpoint = c.req.path
+  
+  console.log(`🌐 Middleware público - Endpoint: ${endpoint}, Auth Header: ${authHeader ? 'presente' : 'ausente'}`)
+  
+  if (!authHeader) {
+    // Se não há header, permitir acesso público limitado
+    console.log(`🔓 Acesso público sem autenticação para ${endpoint}`)
+    c.set('isPublic', true)
+    c.set('isAuthenticated', false)
+    await next()
+    return
   }
 
   const token = authHeader.replace('Bearer ', '')
   
   // Se for o token público, permitir acesso limitado
   if (token === Deno.env.get('SUPABASE_ANON_KEY')) {
+    console.log(`🔓 Acesso público com token anon para ${endpoint}`)
     c.set('isPublic', true)
+    c.set('isAuthenticated', false)
     await next()
     return
   }
 
-  // Se for um token de usuário (formato: fake_token_USER_ID)
-  if (token.startsWith('fake_token_')) {
-    const userId = token.replace('fake_token_', '')
+  // Tentar verificar se é um JWT válido do Supabase
+  try {
+    const { data: { user }, error } = await supabase.auth.getUser(token)
     
-    // Verificar se o usuário existe
-    const userRecord = await kv.get(`user:id:${userId}`)
-    if (!userRecord) {
-      return c.json({ code: 401, message: 'Invalid JWT' }, 401)
+    if (!error && user) {
+      console.log(`✅ JWT válido detectado em endpoint público: ${user.id}`)
+      
+      // Buscar dados do usuário
+      const email = user.email || ''
+      const username = user.user_metadata?.username || email.split('@')[0]
+      const userData = await kv.get(`user:${username}`)
+      
+      if (userData) {
+        console.log(`✅ Usuário autenticado em endpoint público: ${userData.username}`)
+        c.set('currentUser', userData)
+        c.set('isAuthenticated', true)
+        c.set('supabaseUser', user)
+        await next()
+        return
+      }
     }
-    
-    const user = await kv.get(`user:${userRecord}`)
-    if (!user) {
-      return c.json({ code: 401, message: 'Invalid JWT' }, 401)
-    }
-    
-    c.set('currentUser', user)
-    c.set('isAuthenticated', true)
-    await next()
-    return
+  } catch (error) {
+    console.log(`🔍 Token não é JWT válido, permitindo acesso público`)
   }
 
-  return c.json({ code: 401, message: 'Invalid JWT' }, 401)
+  // Se chegou aqui, permitir acesso público
+  console.log(`🔓 Acesso público para ${endpoint}`)
+  c.set('isPublic', true)
+  c.set('isAuthenticated', false)
+  await next()
 }
 
 // Rotas do sistema Sistemáticos de Plantão
 
-// 🔐 AUTH - Cadastro de usuário
-app.post('/make-server-cc2c4d6e/auth/register', async (c) => {
+// 🔐 AUTH - Registro usando Supabase Admin API
+app.post('/make-server-cc2c4d6e/auth/register', publicMiddleware, async (c) => {
   try {
     const { username, password } = await c.req.json()
     
+    console.log(`🔄 REGISTRO: Iniciando para ${username} com senha de ${password?.length || 0} caracteres`)
+    
     if (!username || !password) {
+      console.log('❌ REGISTRO: Dados faltando')
       return c.json({ error: 'Username e password são obrigatórios' }, 400)
     }
 
-    // Verificar se usuário já existe
-    const existingUser = await kv.get(`user:${username}`)
+    // Verificar se usuário já existe no nosso sistema
+    const existingUser = await kv.get(`user:${username.toLowerCase()}`)
     if (existingUser) {
-      return c.json({ error: 'Usuário já existe' }, 409)
+      console.log(`ℹ️ REGISTRO: Usuário ${username.toLowerCase()} já existe no sistema`)
+      return c.json({ success: true, user: existingUser, message: 'Usuário já existe' })
     }
 
-    // Criar usuário
+    console.log(`📝 REGISTRO: Criando usuário via Admin API: ${username.toLowerCase()}`)
+    console.log(`📝 REGISTRO: Email será: ${username.toLowerCase()}@sistematics.local`)
+    
+    // Criar usuário via Supabase Admin API
+    const { data, error } = await supabase.auth.admin.createUser({
+      email: `${username.toLowerCase()}@sistematics.local`,
+      password: password,
+      user_metadata: { 
+        username: username.toLowerCase(),
+        display_name: username 
+      },
+      // Confirmar email automaticamente já que não temos servidor de email configurado
+      email_confirm: true
+    })
+
+    console.log(`📝 REGISTRO: Resposta da Admin API:`, { 
+      success: !error,
+      userId: data?.user?.id,
+      errorMessage: error?.message 
+    })
+
+    if (error) {
+      console.error('❌ Erro do Supabase Admin:', error)
+      
+      // Se o usuário já está registrado no Supabase, verificar se existe no nosso sistema
+      if (error.message.includes('User already registered') || error.message.includes('already been registered')) {
+        console.log('ℹ️ Usuário já registrado no Supabase, verificando dados locais...')
+        
+        // Buscar no nosso sistema
+        const localUser = await kv.get(`user:${username.toLowerCase()}`)
+        if (localUser) {
+          console.log('✅ Usuário encontrado no sistema local também')
+          return c.json({ success: true, user: localUser, message: 'Usuário já registrado' })
+        } else {
+          console.log('⚠️ Usuário existe no Supabase mas não no sistema local, isso é um problema')
+          return c.json({ error: 'Usuário parcialmente registrado. Tente fazer login.' }, 409)
+        }
+      }
+      
+      // Outros erros
+      let friendlyError = error.message
+      if (error.message.includes('Password should be at least')) {
+        friendlyError = 'A senha deve ter pelo menos 6 caracteres'
+      } else if (error.message.includes('Unable to validate email address')) {
+        friendlyError = 'Formato de email inválido'
+      }
+      
+      return c.json({ error: friendlyError }, 400)
+    }
+
+    if (!data.user) {
+      return c.json({ error: 'Falha ao criar usuário' }, 500)
+    }
+
+    console.log(`✅ Usuário criado no Supabase: ${data.user.id}`)
+
+    // Criar usuário no nosso sistema
     const user = {
-      id: crypto.randomUUID(),
-      username,
-      password, // Em produção, usar hash
-      createdAt: new Date().toISOString(),
+      id: data.user.id,
+      username: username.toLowerCase(),
+      createdAt: data.user.created_at,
       points: 0,
       totalPoints: 0,
       rank: 1,
       achievements: [],
-      friends: [],
       avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${username}`,
       joinedAt: new Date().toISOString()
     }
 
-    await kv.set(`user:${username}`, user)
-    await kv.set(`user:id:${user.id}`, username)
+    console.log(`💾 REGISTRO: Salvando dados no KV store...`)
+    await kv.set(`user:${username.toLowerCase()}`, user)
+    await kv.set(`user:id:${data.user.id}`, username.toLowerCase())
 
-    // Adicionar ao leaderboard
+    console.log(`📊 REGISTRO: Atualizando leaderboard...`)
+    // Atualizar leaderboard
     await updateLeaderboard()
 
+    console.log(`✅ REGISTRO: Processo completo para ${username.toLowerCase()}`)
+    console.log(`✅ REGISTRO: Usuário pode fazer login com: ${username.toLowerCase()}@sistematics.local`)
+
     return c.json({ 
       success: true, 
-      user: { ...user, password: undefined } 
+      user: user,
+      message: 'Usuário criado com sucesso'
     })
   } catch (error) {
-    console.error('Erro no cadastro:', error)
+    console.error('❌ Erro no registro:', error)
     return c.json({ error: 'Erro interno do servidor' }, 500)
   }
 })
 
-// 🔐 AUTH - Login
-app.post('/make-server-cc2c4d6e/auth/login', async (c) => {
+// 📊 PONTOS - Adicionar ponto (requer autenticação)
+app.post('/make-server-cc2c4d6e/points/add', authMiddleware, async (c) => {
   try {
-    const { username, password } = await c.req.json()
+    const { reason, points } = await c.req.json()
+    const currentUser = c.get('currentUser')
+    const supabaseUser = c.get('supabaseUser')
     
-    const user = await kv.get(`user:${username}`)
-    if (!user || user.password !== password) {
-      return c.json({ error: 'Credenciais inválidas' }, 401)
+    if (!currentUser || !supabaseUser) {
+      console.error('❌ Usuário não encontrado no contexto de autenticação')
+      return c.json({ error: 'Usuário não autenticado' }, 401)
     }
-
-    return c.json({ 
-      success: true, 
-      user: { ...user, password: undefined },
-      token: `fake_token_${user.id}` // Em produção, usar JWT real
-    })
-  } catch (error) {
-    console.error('Erro no login:', error)
-    return c.json({ error: 'Erro interno do servidor' }, 500)
-  }
-})
-
-// 📊 PONTOS - Adicionar ponto
-app.post('/make-server-cc2c4d6e/points/add', async (c) => {
-  try {
-    const { username, reason, points } = await c.req.json()
+    
+    const username = currentUser.username
     
     console.log(`🎯 Tentativa de adicionar ponto: ${username}, ${reason}, ${points}`)
     
+    // Buscar usuário atualizado do banco para garantir dados consistentes
     const user = await kv.get(`user:${username}`)
     if (!user) {
-      console.log(`❌ Usuário não encontrado: ${username}`)
+      console.error(`❌ Usuário ${username} não encontrado no banco`)
       return c.json({ error: 'Usuário não encontrado' }, 404)
     }
+    
+    console.log(`📊 Usuário encontrado: ${username} com ${user.totalPoints || 0} pontos totais`)
 
-    console.log(`📊 Usuário encontrado: ${username} com ${user.totalPoints} pontos totais`)
+    // Validar dados de entrada
+    if (!reason || typeof points !== 'number' || points <= 0) {
+      console.error(`❌ Dados inválidos: reason=${reason}, points=${points}`)
+      return c.json({ error: 'Dados inválidos' }, 400)
+    }
 
     // Atualizar pontos do usuário
-    const pontosAntesUpdate = user.totalPoints
-    user.points += points
-    user.totalPoints += points
+    const pontosAntesUpdate = user.totalPoints || 0
+    const pontosTemporadaAntes = user.points || 0
+    user.points = (user.points || 0) + points // Pontos da temporada atual
+    user.totalPoints = (user.totalPoints || 0) + points // Pontos históricos totais
     await kv.set(`user:${username}`, user)
     
-    console.log(`📊 Pontos atualizados para ${username}: ${pontosAntesUpdate} -> ${user.totalPoints} (adicionado: ${points})`)
+    console.log(`📊 Pontos atualizados para ${username}:`)
+    console.log(`   Total: ${pontosAntesUpdate} -> ${user.totalPoints} (+${points})`)
+    console.log(`   Temporada: ${pontosTemporadaAntes} -> ${user.points} (+${points})`)
 
     // Registrar no histórico
     const record = {
@@ -227,8 +376,8 @@ app.post('/make-server-cc2c4d6e/points/add', async (c) => {
   }
 })
 
-// 🏆 LEADERBOARD - Buscar ranking
-app.get('/make-server-cc2c4d6e/leaderboard', async (c) => {
+// 🏆 LEADERBOARD - Buscar ranking (público)
+app.get('/make-server-cc2c4d6e/leaderboard', publicMiddleware, async (c) => {
   try {
     const leaderboard = await kv.get('leaderboard:current') || []
     return c.json({ success: true, leaderboard })
@@ -272,8 +421,8 @@ app.get('/make-server-cc2c4d6e/history/:username', authMiddleware, async (c) => 
   }
 })
 
-// 📋 HISTÓRICO - Buscar registros globais
-app.get('/make-server-cc2c4d6e/history/global/recent', async (c) => {
+// 📋 HISTÓRICO - Buscar registros globais (público)
+app.get('/make-server-cc2c4d6e/history/global/recent', publicMiddleware, async (c) => {
   try {
     const page = parseInt(c.req.query('page') || '1')
     const limit = parseInt(c.req.query('limit') || '10')
@@ -297,8 +446,8 @@ app.get('/make-server-cc2c4d6e/history/global/recent', async (c) => {
   }
 })
 
-// 👥 USUÁRIOS - Buscar todos
-app.get('/make-server-cc2c4d6e/users', async (c) => {
+// 👥 USUÁRIOS - Buscar todos (público)
+app.get('/make-server-cc2c4d6e/users', publicMiddleware, async (c) => {
   try {
     const userKeys = await kv.getByPrefix('user:')
     const users = userKeys
@@ -341,8 +490,8 @@ app.get('/make-server-cc2c4d6e/user/:username', authMiddleware, async (c) => {
 
 
 
-// 🔄 REAL-TIME - Status do servidor
-app.get('/make-server-cc2c4d6e/status', async (c) => {
+// 🔄 REAL-TIME - Status do servidor (público)
+app.get('/make-server-cc2c4d6e/status', publicMiddleware, async (c) => {
   try {
     const userKeys = await kv.getByPrefix('user:')
     const totalUsers = userKeys.filter(item => !item.key.includes('user:id:')).length
@@ -359,134 +508,134 @@ app.get('/make-server-cc2c4d6e/status', async (c) => {
   }
 })
 
-// 👥 AMIZADES - Enviar solicitação
-app.post('/make-server-cc2c4d6e/friends/request', authMiddleware, async (c) => {
+// 🔄 ADMIN - Limpar usuários antigos (usuários no KV que não estão no Supabase Auth)
+app.post('/make-server-cc2c4d6e/admin/cleanup-users', publicMiddleware, async (c) => {
   try {
-    const { fromUsername, toUsername } = await c.req.json()
+    console.log('🧹 Iniciando limpeza de usuários antigos...')
     
-    if (fromUsername === toUsername) {
-      return c.json({ error: 'Não é possível enviar solicitação para si mesmo' }, 400)
-    }
-
-    const fromUser = await kv.get(`user:${fromUsername}`)
-    const toUser = await kv.get(`user:${toUsername}`)
+    const userKeys = await kv.getByPrefix('user:')
+    const usersToCheck = userKeys.filter(item => !item.key.includes('user:id:'))
     
-    if (!fromUser || !toUser) {
-      return c.json({ error: 'Usuário não encontrado' }, 404)
+    let usersRemoved = 0
+    let usersKept = 0
+    
+    for (const userItem of usersToCheck) {
+      const user = userItem.value
+      if (user && user.username) {
+        try {
+          // Verificar se o usuário existe no Supabase Auth
+          const email = `${user.username}@sistematics.local`
+          const { data, error } = await supabase.auth.admin.getUserByEmail(email)
+          
+          if (error || !data.user) {
+            // Usuário não existe no Supabase Auth, remover do KV
+            console.log(`🗑️ Removendo usuário antigo: ${user.username}`)
+            await kv.del(`user:${user.username}`)
+            if (user.id) {
+              await kv.del(`user:id:${user.id}`)
+            }
+            // Remover histórico também
+            await kv.del(`history:${user.username}`)
+            usersRemoved++
+          } else {
+            console.log(`✅ Mantendo usuário válido: ${user.username}`)
+            usersKept++
+          }
+        } catch (checkError) {
+          console.error(`❌ Erro ao verificar usuário ${user.username}:`, checkError)
+          // Em caso de dúvida, manter o usuário
+          usersKept++
+        }
+      }
     }
-
-    // Verificar se já são amigos
-    if (fromUser.friends?.includes(toUsername)) {
-      return c.json({ error: 'Já são amigos' }, 400)
-    }
-
-    // Criar solicitação
-    const request = {
-      id: crypto.randomUUID(),
-      from: fromUsername,
-      to: toUsername,
-      fromAvatar: fromUser.avatar,
-      timestamp: new Date().toISOString(),
-      status: 'pending'
-    }
-
-    // Verificar se já existe solicitação pendente
-    const existingRequests = await kv.get(`friend_requests:${toUsername}`) || []
-    if (existingRequests.find(req => req.from === fromUsername && req.status === 'pending')) {
-      return c.json({ error: 'Solicitação já enviada' }, 400)
-    }
-
-    existingRequests.push(request)
-    await kv.set(`friend_requests:${toUsername}`, existingRequests)
-
-    return c.json({ success: true, request })
+    
+    // Atualizar leaderboard após limpeza
+    await updateLeaderboard()
+    
+    // Limpar e recriar histórico global apenas com usuários válidos
+    const remainingUsers = await kv.getByPrefix('user:')
+    const validUsernames = remainingUsers
+      .filter(item => !item.key.includes('user:id:'))
+      .map(item => item.value.username)
+    
+    const currentGlobalHistory = await kv.get('history:global') || []
+    const cleanedGlobalHistory = currentGlobalHistory.filter(record => 
+      validUsernames.includes(record.username)
+    )
+    
+    await kv.set('history:global', cleanedGlobalHistory)
+    
+    console.log(`🏁 Limpeza concluída! ${usersRemoved} usuários removidos, ${usersKept} usuários mantidos`)
+    
+    return c.json({
+      success: true,
+      message: `Limpeza concluída! ${usersRemoved} usuários antigos removidos, ${usersKept} usuários válidos mantidos`,
+      usersRemoved,
+      usersKept,
+      timestamp: new Date().toISOString()
+    })
   } catch (error) {
-    console.error('Erro ao enviar solicitação de amizade:', error)
+    console.error('Erro na limpeza de usuários:', error)
     return c.json({ error: 'Erro interno do servidor' }, 500)
   }
 })
 
-// 👥 AMIZADES - Responder solicitação
-app.post('/make-server-cc2c4d6e/friends/respond', authMiddleware, async (c) => {
+// 🔄 ADMIN - Reset de temporada (resetar pontos de todos os usuários)
+app.post('/make-server-cc2c4d6e/admin/reset-season', publicMiddleware, async (c) => {
   try {
-    const { username, requestId, accept } = await c.req.json()
+    console.log('🔄 Iniciando reset da temporada...')
     
-    const requests = await kv.get(`friend_requests:${username}`) || []
-    const requestIndex = requests.findIndex(req => req.id === requestId)
+    const userKeys = await kv.getByPrefix('user:')
+    const users = userKeys.filter(item => !item.key.includes('user:id:'))
     
-    if (requestIndex === -1) {
-      return c.json({ error: 'Solicitação não encontrada' }, 404)
+    let usersReset = 0
+    
+    // Resetar pontos de todos os usuários
+    for (const userItem of users) {
+      const user = userItem.value
+      if (user && user.username) {
+        user.points = 0 // Zerar pontos da temporada atual
+        // Manter totalPoints como histórico
+        user.rank = 1 // Resetar ranking
+        
+        await kv.set(`user:${user.username}`, user)
+        usersReset++
+        
+        console.log(`✅ Reset pontos do usuário: ${user.username}`)
+      }
     }
-
-    const request = requests[requestIndex]
     
-    if (accept) {
-      // Adicionar como amigos
-      const user = await kv.get(`user:${username}`)
-      const friendUser = await kv.get(`user:${request.from}`)
-      
-      if (!user.friends) user.friends = []
-      if (!friendUser.friends) friendUser.friends = []
-      
-      user.friends.push(request.from)
-      friendUser.friends.push(username)
-      
-      await kv.set(`user:${username}`, user)
-      await kv.set(`user:${request.from}`, friendUser)
-    }
-
-    // Remover solicitação
-    requests.splice(requestIndex, 1)
-    await kv.set(`friend_requests:${username}`, requests)
-
-    return c.json({ success: true })
-  } catch (error) {
-    console.error('Erro ao responder solicitação de amizade:', error)
-    return c.json({ error: 'Erro interno do servidor' }, 500)
-  }
-})
-
-// 👥 AMIZADES - Buscar solicitações
-app.get('/make-server-cc2c4d6e/friends/requests/:username', authMiddleware, async (c) => {
-  try {
-    const username = c.req.param('username')
-    const requests = await kv.get(`friend_requests:${username}`) || []
+    // Atualizar leaderboard
+    await updateLeaderboard()
+    
+    // Limpar histórico global se desejado (opcional)
+    await kv.set('history:global', [])
+    
+    console.log(`🏁 Reset da temporada concluído! ${usersReset} usuários resetados`)
     
     return c.json({ 
       success: true, 
-      requests: requests.filter(req => req.status === 'pending')
+      message: `Temporada resetada com sucesso! ${usersReset} usuários afetados`,
+      usersReset,
+      timestamp: new Date().toISOString()
     })
   } catch (error) {
-    console.error('Erro ao buscar solicitações de amizade:', error)
+    console.error('Erro no reset da temporada:', error)
     return c.json({ error: 'Erro interno do servidor' }, 500)
   }
 })
 
-// 👥 AMIZADES - Buscar amigos
-app.get('/make-server-cc2c4d6e/friends/:username', authMiddleware, async (c) => {
-  try {
-    const username = c.req.param('username')
-    const user = await kv.get(`user:${username}`)
-    
-    if (!user) {
-      return c.json({ error: 'Usuário não encontrado' }, 404)
-    }
 
-    const friends = []
-    for (const friendUsername of user.friends || []) {
-      const friend = await kv.get(`user:${friendUsername}`)
-      if (friend) {
-        const { password, ...friendWithoutPassword } = friend
-        friends.push(friendWithoutPassword)
-      }
-    }
 
-    return c.json({ success: true, friends })
-  } catch (error) {
-    console.error('Erro ao buscar amigos:', error)
-    return c.json({ error: 'Erro interno do servidor' }, 500)
-  }
-})
+
+
+
+
+
+
+
+
+
 
 // 🏆 CONQUISTAS - Buscar conquistas de um usuário
 app.get('/make-server-cc2c4d6e/achievements/:username', authMiddleware, async (c) => {
@@ -521,7 +670,7 @@ async function updateLeaderboard() {
         const { password, ...userWithoutPassword } = item.value
         return userWithoutPassword
       })
-      .sort((a, b) => b.points - a.points)
+      .sort((a, b) => (b.totalPoints || 0) - (a.totalPoints || 0)) // Corrigido: usar totalPoints
       .map((user, index) => ({
         ...user,
         rank: index + 1
@@ -537,6 +686,8 @@ async function updateLeaderboard() {
         await kv.set(`user:${user.username}`, fullUser)
       }
     }
+    
+    console.log(`🏆 Leaderboard atualizado com ${users.length} usuários`)
   } catch (error) {
     console.error('Erro ao atualizar leaderboard:', error)
   }

@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from './auth-context';
 import { useAuthStore } from './auth-store';
+import { SystemAPI } from '../utils/supabase/client';
+import { SystemStatus } from './system-status';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Avatar, AvatarFallback } from './ui/avatar';
 import { Button } from './ui/button';
@@ -14,11 +16,9 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { 
   User, 
   Edit3, 
-  Users, 
   Trophy, 
   Calendar,
   Trash2,
-  UserPlus,
   Crown,
   Target,
   Medal,
@@ -66,8 +66,6 @@ export const Profile: React.FC<ProfileProps> = ({ section = 'profile', targetUse
   const [activeTab, setActiveTab] = useState(section);
   const [isLoading, setIsLoading] = useState(false);
   const [user, setUser] = useState(currentUser);
-  const [friendRequests, setFriendRequests] = useState([]);
-  const [userFriends, setUserFriends] = useState([]);
 
   const isOwnProfile = !targetUser || targetUser === currentUser?.username;
 
@@ -77,17 +75,9 @@ export const Profile: React.FC<ProfileProps> = ({ section = 'profile', targetUse
       if (targetUser && targetUser !== currentUser?.username) {
         setIsLoading(true);
         try {
-          const response = await fetch(`https://buephwmfqzwqcxuwbuvu.supabase.co/functions/v1/make-server-cc2c4d6e/user/${targetUser}`, {
-            headers: {
-              'Authorization': `Bearer ${currentUser?.sessionToken || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ1ZXBod21mcXp3cWN4dXdidXZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Mjc4MTk4NDksImV4cCI6MjA0MzM5NTg0OX0.UWazpJl2e0kLpd3WCTGpVKfbGGHWPnAzRe9VgJDyMu0'}`
-            }
-          });
-          
-          if (response.ok) {
-            const data = await response.json();
-            if (data.success) {
-              setUser(data.user);
-            }
+          const response = await SystemAPI.getUserProfile(targetUser);
+          if (response.success) {
+            setUser(response.user);
           }
         } catch (error) {
           console.error('Erro ao carregar usuário:', error);
@@ -102,128 +92,9 @@ export const Profile: React.FC<ProfileProps> = ({ section = 'profile', targetUse
     loadUser();
   }, [targetUser, currentUser]);
 
-  // Load friend requests for own profile
-  useEffect(() => {
-    const loadFriendRequests = async () => {
-      if (currentUser && isOwnProfile) {
-        try {
-          const response = await fetch(`https://buephwmfqzwqcxuwbuvu.supabase.co/functions/v1/make-server-cc2c4d6e/friends/requests/${currentUser.username}`, {
-            headers: {
-              'Authorization': `Bearer ${currentUser?.sessionToken || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ1ZXBod21mcXp3cWN4dXdidXZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Mjc4MTk4NDksImV4cCI6MjA0MzM5NTg0OX0.UWazpJl2e0kLpd3WCTGpVKfbGGHWPnAzRe9VgJDyMu0'}`
-            }
-          });
-          
-          if (response.ok) {
-            const data = await response.json();
-            if (data.success) {
-              setFriendRequests(data.requests);
-            }
-          }
-        } catch (error) {
-          console.error('Erro ao carregar solicitações de amizade:', error);
-        }
-      }
-    };
 
-    loadFriendRequests();
-  }, [currentUser, isOwnProfile]);
 
-  // Load user friends
-  useEffect(() => {
-    const loadUserFriends = async () => {
-      if (user) {
-        try {
-          const response = await fetch(`https://buephwmfqzwqcxuwbuvu.supabase.co/functions/v1/make-server-cc2c4d6e/friends/${user.username}`, {
-            headers: {
-              'Authorization': `Bearer ${currentUser?.sessionToken || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ1ZXBod21mcXp3cWN4dXdidXZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Mjc4MTk4NDksImV4cCI6MjA0MzM5NTg0OX0.UWazpJl2e0kLpd3WCTGpVKfbGGHWPnAzRe9VgJDyMu0'}`
-            }
-          });
-          
-          if (response.ok) {
-            const data = await response.json();
-            if (data.success) {
-              setUserFriends(data.friends);
-            }
-          }
-        } catch (error) {
-          console.error('Erro ao carregar amigos:', error);
-        }
-      }
-    };
 
-    loadUserFriends();
-  }, [user, currentUser]);
-
-  // Send friend request
-  const sendFriendRequest = async () => {
-    if (!currentUser || !targetUser) return;
-
-    try {
-      const response = await fetch(`https://buephwmfqzwqcxuwbuvu.supabase.co/functions/v1/make-server-cc2c4d6e/friends/request`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${currentUser?.sessionToken || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ1ZXBod21mcXp3cWN4dXdidXZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Mjc4MTk4NDksImV4cCI6MjA0MzM5NTg0OX0.UWazpJl2e0kLpd3WCTGpVKfbGGHWPnAzRe9VgJDyMu0'}`
-        },
-        body: JSON.stringify({
-          fromUsername: currentUser.username,
-          toUsername: targetUser
-        })
-      });
-
-      if (response.ok) {
-        toast.success('Solicitação de amizade enviada!');
-      } else {
-        const error = await response.json();
-        toast.error(error.error || 'Erro ao enviar solicitação');
-      }
-    } catch (error) {
-      console.error('Erro ao enviar solicitação de amizade:', error);
-      toast.error('Erro ao enviar solicitação');
-    }
-  };
-
-  // Respond to friend request
-  const respondToFriendRequest = async (requestId: string, accept: boolean) => {
-    if (!currentUser) return;
-
-    try {
-      const response = await fetch(`https://buephwmfqzwqcxuwbuvu.supabase.co/functions/v1/make-server-cc2c4d6e/friends/respond`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${currentUser?.sessionToken || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ1ZXBod21mcXp3cWN4dXdidXZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Mjc4MTk4NDksImV4cCI6MjA0MzM5NTg0OX0.UWazpJl2e0kLpd3WCTGpVKfbGGHWPnAzRe9VgJDyMu0'}`
-        },
-        body: JSON.stringify({
-          username: currentUser.username,
-          requestId,
-          accept
-        })
-      });
-
-      if (response.ok) {
-        toast.success(accept ? 'Amizade aceita!' : 'Solicitação rejeitada');
-        // Reload friend requests
-        const requestsResponse = await fetch(`https://buephwmfqzwqcxuwbuvu.supabase.co/functions/v1/make-server-cc2c4d6e/friends/requests/${currentUser.username}`, {
-          headers: {
-            'Authorization': `Bearer ${currentUser?.sessionToken || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ1ZXBod21mcXp3cWN4dXdidXZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Mjc4MTk4NDksImV4cCI6MjA0MzM5NTg0OX0.UWazpJl2e0kLpd3WCTGpVKfbGGHWPnAzRe9VgJDyMu0'}`
-          }
-        });
-        if (requestsResponse.ok) {
-          const data = await requestsResponse.json();
-          if (data.success) {
-            setFriendRequests(data.requests);
-          }
-        }
-      } else {
-        const error = await response.json();
-        toast.error(error.error || 'Erro ao responder solicitação');
-      }
-    } catch (error) {
-      console.error('Erro ao responder solicitação:', error);
-      toast.error('Erro ao responder solicitação');
-    }
-  };
 
   // Calculate achievements dynamically
   const calculateAchievements = () => {
@@ -275,7 +146,7 @@ export const Profile: React.FC<ProfileProps> = ({ section = 'profile', targetUse
         id: '5',
         name: 'Mentor',
         description: 'Ajude 10 colegas (registre "Ajudar um colega" 10 vezes)',
-        icon: Users,
+        icon: Heart,
         condition: () => {
           const helpRecords = userRecords.filter(r => 
             r?.reason?.toLowerCase().includes('ajudar') || 
@@ -458,11 +329,9 @@ export const Profile: React.FC<ProfileProps> = ({ section = 'profile', targetUse
       {
         id: '18',
         name: 'Popular',
-        description: 'Tenha 10 amigos na plataforma',
+        description: 'Acumule 1000 pontos totais',
         icon: Heart,
-        condition: () => {
-          return userFriends.length >= 10;
-        }
+        condition: () => totalPoints >= 1000
       },
 
       // Conquistas lendárias
@@ -845,10 +714,10 @@ export const Profile: React.FC<ProfileProps> = ({ section = 'profile', targetUse
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="hidden md:grid w-full grid-cols-6">
           <TabsTrigger value="profile">Perfil</TabsTrigger>
-          <TabsTrigger value="friends">Amizades</TabsTrigger>
           <TabsTrigger value="achievements">Conquistas</TabsTrigger>
           <TabsTrigger value="seasons">Temporadas</TabsTrigger>
           {isOwnProfile && <TabsTrigger value="settings">Configurações</TabsTrigger>}
+          {isOwnProfile && <TabsTrigger value="status">Status</TabsTrigger>}
           {isOwnProfile && <TabsTrigger value="delete" className="text-destructive">Excluir</TabsTrigger>}
         </TabsList>
 
@@ -859,10 +728,6 @@ export const Profile: React.FC<ProfileProps> = ({ section = 'profile', targetUse
               <Button onClick={onBackToOwnProfile} variant="outline">
                 <ArrowLeft className="h-4 w-4 mr-2" />
                 Voltar ao meu perfil
-              </Button>
-              <Button onClick={sendFriendRequest} className="ml-auto">
-                <UserPlus className="h-4 w-4 mr-2" />
-                Adicionar como Amigo
               </Button>
             </div>
           )}
@@ -960,90 +825,7 @@ export const Profile: React.FC<ProfileProps> = ({ section = 'profile', targetUse
           </Card>
         </TabsContent>
 
-        {/* Friends Tab */}
-        <TabsContent value="friends" className="space-y-6">
-          {!isOwnProfile && (
-            <div className="flex items-center gap-4 mb-6">
-              <Button onClick={onBackToOwnProfile} variant="outline">
-                <ArrowLeft className="h-4 w-4 mr-2" />
-                Voltar ao meu perfil
-              </Button>
-            </div>
-          )}
-          
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Users className="h-5 w-5" />
-                {isOwnProfile ? 'Suas Amizades' : `Amigos de ${user?.username}`}
-              </CardTitle>
-              <CardDescription>
-                {isOwnProfile ? 'Gerencie suas conexões e solicitações de amizade' : 'Lista de amigos deste usuário'}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {isOwnProfile && friendRequests.length > 0 && (
-                <div className="mb-6">
-                  <h4 className="mb-3">Solicitações Pendentes</h4>
-                  <div className="space-y-2">
-                    {friendRequests.map((request) => (
-                      <div key={request.id} className="flex items-center justify-between p-3 border rounded-lg">
-                        <div className="flex items-center gap-3">
-                          <Avatar>
-                            <AvatarFallback>{request.fromUsername.charAt(0).toUpperCase()}</AvatarFallback>
-                          </Avatar>
-                          <div>
-                            <p className="font-medium">{request.fromUsername}</p>
-                            <p className="text-sm text-muted-foreground">Quer ser seu amigo</p>
-                          </div>
-                        </div>
-                        <div className="flex gap-2">
-                          <Button 
-                            size="sm" 
-                            onClick={() => respondToFriendRequest(request.id, true)}
-                          >
-                            Aceitar
-                          </Button>
-                          <Button 
-                            size="sm" 
-                            variant="outline"
-                            onClick={() => respondToFriendRequest(request.id, false)}
-                          >
-                            Recusar
-                          </Button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                  <Separator className="my-4" />
-                </div>
-              )}
-              
-              <div>
-                <h4 className="mb-3">Lista de Amigos</h4>
-                {userFriends.length > 0 ? (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {userFriends.map((friend) => (
-                      <div key={friend.id} className="flex items-center gap-3 p-3 border rounded-lg">
-                        <Avatar>
-                          <AvatarFallback>{friend.username.charAt(0).toUpperCase()}</AvatarFallback>
-                        </Avatar>
-                        <div className="flex-1">
-                          <p className="font-medium">{friend.username}</p>
-                          <p className="text-sm text-muted-foreground">{friend.points} pontos</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-muted-foreground">
-                    {isOwnProfile ? 'Você ainda não tem amigos. Comece adicionando alguns usuários!' : 'Este usuário ainda não tem amigos públicos.'}
-                  </p>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
+
 
         {/* Achievements Tab */}
         <TabsContent value="achievements" className="space-y-6">
@@ -1234,6 +1016,26 @@ export const Profile: React.FC<ProfileProps> = ({ section = 'profile', targetUse
           </TabsContent>
         )}
 
+        {/* Status Tab - Only for own profile */}
+        {isOwnProfile && (
+          <TabsContent value="status" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Target className="h-5 w-5" />
+                  Status do Sistema
+                </CardTitle>
+                <CardDescription>
+                  Verificação do funcionamento dos endpoints do servidor
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <SystemStatus />
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
+
         {/* Delete Tab - Only for own profile */}
         {isOwnProfile && (
           <TabsContent value="delete" className="space-y-6">
@@ -1258,7 +1060,6 @@ export const Profile: React.FC<ProfileProps> = ({ section = 'profile', targetUse
                       <li>• Todos os seus pontos e registros</li>
                       <li>• Todas as suas conquistas</li>
                       <li>• Histórico de atividades</li>
-                      <li>• Conexões com amigos</li>
                     </ul>
                   </div>
                   

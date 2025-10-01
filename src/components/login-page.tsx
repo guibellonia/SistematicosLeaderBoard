@@ -6,6 +6,7 @@ import { Label } from './ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Alert, AlertDescription } from './ui/alert';
 import { Target, AlertCircle, Eye, EyeOff } from 'lucide-react';
+import { toast } from 'sonner@2.0.3';
 
 export const LoginPage: React.FC = () => {
   const { login, register } = useAuthStore();
@@ -17,24 +18,41 @@ export const LoginPage: React.FC = () => {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [status, setStatus] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     setError('');
+    setStatus('');
 
-    if (mode === 'login') {
-      const result = await login(username, password);
-      if (!result.success) {
-        setError(result.error || 'Erro ao fazer login');
+    try {
+      if (mode === 'login') {
+        setStatus('Entrando...');
+        
+        const result = await login(username, password);
+        if (!result.success) {
+          setError(result.error || 'Erro ao fazer login');
+        } else if ((result as any).wasAutoCreated) {
+          toast.success('🎉 Bem-vindo! Sua conta foi criada automaticamente.', {
+            description: 'Você pode começar a acumular pontos imediatamente!'
+          });
+        }
+      } else {
+        setStatus('Criando conta...');
+        
+        const result = await register(username, password, confirmPassword);
+        if (!result.success) {
+          setError(result.error || 'Erro ao criar conta');
+        }
       }
-    } else {
-      const result = await register(username, password, confirmPassword);
-      if (!result.success) {
-        setError(result.error || 'Erro ao criar conta');
-      }
+    } catch (error: any) {
+      setError('Erro inesperado. Tente novamente.');
+      console.error('Erro no submit:', error);
+    } finally {
+      setIsLoading(false);
+      setStatus('');
     }
-    setIsLoading(false);
   };
 
   const toggleMode = () => {
@@ -147,6 +165,13 @@ export const LoginPage: React.FC = () => {
               </Alert>
             )}
 
+            {status && (
+              <Alert>
+                <Target className="h-4 w-4" />
+                <AlertDescription>{status}</AlertDescription>
+              </Alert>
+            )}
+
             <Button type="submit" className="w-full" disabled={isLoading}>
               {isLoading 
                 ? (mode === 'login' ? 'Entrando...' : 'Criando conta...') 
@@ -169,16 +194,9 @@ export const LoginPage: React.FC = () => {
             </Button>
           </div>
 
-          {mode === 'login' && (
-            <div className="mt-6 p-4 bg-muted rounded-lg">
-              <p className="text-sm font-medium mb-2">💡 Dica:</p>
-              <p className="text-sm text-muted-foreground">
-                Primeira vez aqui? Clique em "Cadastre-se" para criar sua conta e começar a acumular pontos!
-              </p>
-            </div>
-          )}
         </CardContent>
       </Card>
+
     </div>
   );
 };

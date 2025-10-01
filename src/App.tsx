@@ -6,6 +6,7 @@ import { LoginPage } from './components/login-page';
 import { Dashboard } from './components/dashboard';
 import { Leaderboard } from './components/leaderboard';
 import { Profile } from './components/profile';
+import { UserProfile } from './components/user-profile';
 import { Toaster } from './components/ui/sonner';
 
 const AppContent: React.FC = () => {
@@ -57,17 +58,17 @@ const AppContent: React.FC = () => {
       case 'leaderboard':
         return <Leaderboard onNavigateToProfile={handleNavigateToProfile} />;
       case 'user-profile':
-        return <Profile section="profile" targetUser={selectedUser} onBackToOwnProfile={handleBackToOwnProfile} />;
+        return selectedUser ? <UserProfile targetUser={selectedUser} onBackToOwnProfile={handleBackToOwnProfile} onNavigateToProfile={handleNavigateToProfile} /> : <Dashboard onNavigateToProfile={handleNavigateToProfile} />;
       case 'profile':
         return <Profile section="profile" />;
-      case 'friends':
-        return <Profile section="friends" />;
       case 'achievements':
         return <Profile section="achievements" />;
       case 'seasons':
         return <Profile section="seasons" />;
       case 'settings':
         return <Profile section="settings" />;
+      case 'status':
+        return <Profile section="status" />;
       default:
         return <Dashboard onNavigateToProfile={handleNavigateToProfile} />;
     }
