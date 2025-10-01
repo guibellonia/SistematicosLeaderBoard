@@ -44,24 +44,26 @@
 }
 
 .dark {
-  --background: #1a1a1a;
+  --background: #0a0a0a;
   --foreground: #ffffff;
-  --card: #1a1a1a;
+  --card: #111111;
   --card-foreground: #ffffff;
-  --popover: #1a1a1a;
+  --popover: #111111;
   --popover-foreground: #ffffff;
   --primary: #8b5cf6;
   --primary-foreground: #ffffff;
-  --secondary: #2d2d2d;
+  --secondary: #1f1f1f;
   --secondary-foreground: #ffffff;
-  --muted: #2d2d2d;
+  --muted: #1f1f1f;
   --muted-foreground: #a1a1aa;
   --accent: #8b5cf6;
   --accent-foreground: #ffffff;
   --destructive: #ef4444;
   --destructive-foreground: #ffffff;
-  --border: rgba(255, 255, 255, 0.1);
-  --input: #2d2d2d;
+  --border: rgba(255, 255, 255, 0.15);
+  --input: #1f1f1f;
+  --input-background: #1f1f1f;
+  --switch-background: #374151;
   --ring: #8b5cf6;
   --font-weight-medium: 500;
   --font-weight-normal: 400;
@@ -70,13 +72,13 @@
   --chart-3: #10b981;
   --chart-4: #f59e0b;
   --chart-5: #ef4444;
-  --sidebar: #1a1a1a;
+  --sidebar: #111111;
   --sidebar-foreground: #ffffff;
   --sidebar-primary: #8b5cf6;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #2d2d2d;
+  --sidebar-accent: #1f1f1f;
   --sidebar-accent-foreground: #ffffff;
-  --sidebar-border: rgba(255, 255, 255, 0.1);
+  --sidebar-border: rgba(255, 255, 255, 0.15);
   --sidebar-ring: #8b5cf6;
 }
 
@@ -205,4 +207,60 @@ html {
 /* Custom hover scale classes */
 .hover\:scale-102:hover {
   transform: scale(1.02);
+}
+
+/* Title badge enhancements */
+.title-badge {
+  position: relative;
+  overflow: hidden;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.title-badge::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.2),
+    transparent
+  );
+  transition: left 0.5s;
+}
+
+.title-badge:hover::before {
+  left: 100%;
+}
+
+/* Badge glow effect */
+.badge-glow {
+  box-shadow: 0 0 20px rgba(139, 92, 246, 0.3);
+  transition: box-shadow 0.3s ease;
+}
+
+.badge-glow:hover {
+  box-shadow: 0 0 30px rgba(139, 92, 246, 0.5);
+}
+
+/* Dark mode specific enhancements */
+.dark .badge-glow {
+  box-shadow: 0 0 25px rgba(139, 92, 246, 0.4);
+}
+
+.dark .badge-glow:hover {
+  box-shadow: 0 0 40px rgba(139, 92, 246, 0.6);
+}
+
+/* Smooth transitions per theme changes */
+* {
+  transition: 
+    background-color 0.3s ease,
+    border-color 0.3s ease,
+    color 0.3s ease,
+    box-shadow 0.3s ease;
 }

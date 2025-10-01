@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from './auth-context';
 import { useAuthStore } from './auth-store';
+import { useTheme } from './theme-context';
 import { SystemAPI } from '../utils/supabase/client';
 import { SystemStatus } from './system-status';
 import { SeasonWinnersModal } from './season-winners-modal';
@@ -12,6 +13,7 @@ import { Label } from './ui/label';
 import { Textarea } from './ui/textarea';
 import { Badge } from './ui/badge';
 import { Separator } from './ui/separator';
+import { Switch } from './ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from './ui/alert-dialog';
 import { 
@@ -50,7 +52,9 @@ import {
   BookOpen,
   Music,
   Gamepad2,
-  Infinity
+  Infinity,
+  Moon,
+  Sun
 } from 'lucide-react';
 import { toast } from 'sonner@2.0.3';
 import { calculateAchievements, getUserTitle, calculateEarnedTitles, getAllTitles } from './achievements-definitions';
@@ -65,6 +69,7 @@ interface ProfileProps {
 export const Profile: React.FC<ProfileProps> = ({ section = 'profile', targetUser, onBackToOwnProfile, onNavigateToProfile }) => {
   const { user: currentUser, logout } = useAuth();
   const { getLeaderboard, pointRecords } = useAuthStore();
+  const { theme, toggleTheme } = useTheme();
   const [activeTab, setActiveTab] = useState(section);
   const [isLoading, setIsLoading] = useState(false);
   const [user, setUser] = useState(currentUser);
@@ -316,9 +321,9 @@ export const Profile: React.FC<ProfileProps> = ({ section = 'profile', targetUse
                   <div className="flex-1 min-w-0">
                     <CardTitle className="truncate">{user?.username || 'Usuário'}</CardTitle>
                     <div className="my-2">
-                      <Badge className={`${userTitle.color} text-white font-semibold text-sm px-3 py-1 shadow-lg`}>
-                        {userTitle.title}
-                      </Badge>
+                      <div className={`inline-flex items-center px-3 py-1.5 rounded-lg border text-white font-medium text-sm shadow-lg title-badge badge-glow ${userTitle.color}`}>
+                        <span className="drop-shadow-sm">{userTitle.title}</span>
+                      </div>
                     </div>
                     <CardDescription className="text-sm">
                       {user?.createdAt ? `Usuário desde ${new Date(user.createdAt).toLocaleDateString('pt-BR')}` : 'Novo usuário'}
@@ -418,10 +423,10 @@ export const Profile: React.FC<ProfileProps> = ({ section = 'profile', targetUse
                   <div
                     key={titleInfo.id}
                     onClick={() => isOwnProfile && handleTitleSelect(titleInfo.id)}
-                    className={`p-4 rounded-lg border transition-all duration-200 ${
+                    className={`p-4 rounded-xl border-2 transition-all duration-200 title-badge ${
                       isOwnProfile ? 'cursor-pointer hover:scale-102 hover:shadow-xl' : ''
                     } ${titleInfo.color} text-white shadow-lg ${
-                      selectedTitleId === titleInfo.id ? 'ring-2 ring-white/50' : ''
+                      selectedTitleId === titleInfo.id ? 'ring-2 ring-white/50 scale-105 badge-glow' : ''
                     }`}
                   >
                     <div className="flex items-center justify-between">
@@ -651,6 +656,33 @@ export const Profile: React.FC<ProfileProps> = ({ section = 'profile', targetUse
                       </div>
                       <Button variant="outline" size="sm">Ativado</Button>
                     </div>
+                  </div>
+                </div>
+                
+                <Separator />
+                
+                <div>
+                  <h4>Aparência</h4>
+                  <p className="text-sm text-muted-foreground mb-4">Escolha entre tema claro ou escuro</p>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      {theme === 'light' ? (
+                        <Sun className="h-5 w-5 text-yellow-500" />
+                      ) : (
+                        <Moon className="h-5 w-5 text-blue-500" />
+                      )}
+                      <div>
+                        <p>{theme === 'light' ? 'Modo Claro' : 'Modo Escuro'}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {theme === 'light' ? 'Interface clara e minimalista' : 'Interface escura para os olhos'}
+                        </p>
+                      </div>
+                    </div>
+                    <Switch
+                      checked={theme === 'dark'}
+                      onCheckedChange={toggleTheme}
+                      aria-label="Alternar modo escuro"
+                    />
                   </div>
                 </div>
                 

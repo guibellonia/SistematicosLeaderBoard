@@ -528,20 +528,20 @@ export interface TitleInfo {
 }
 
 export const getAllTitles = (): TitleInfo[] => [
-  { id: 'supremo', title: '🌟 Deus Supremo', requirement: 30, color: 'bg-gradient-to-r from-yellow-400 to-orange-500', description: 'Desbloqueou 30+ conquistas' },
-  { id: 'transcendente', title: '⚡ Transcendente', requirement: 25, color: 'bg-gradient-to-r from-purple-600 to-pink-600', description: 'Desbloqueou 25+ conquistas' },
-  { id: 'lendario', title: '🔥 Lendário', requirement: 20, color: 'bg-gradient-to-r from-red-500 to-orange-600', description: 'Desbloqueou 20+ conquistas' },
-  { id: 'imortal', title: '💎 Imortal', requirement: 15, color: 'bg-gradient-to-r from-blue-600 to-purple-600', description: 'Desbloqueou 15+ conquistas' },
-  { id: 'conquistador', title: '⚔️ Conquistador', requirement: 12, color: 'bg-gradient-to-r from-gray-700 to-gray-900', description: 'Desbloqueou 12+ conquistas' },
-  { id: 'mestre', title: '🏆 Mestre', requirement: 10, color: 'bg-gradient-to-r from-yellow-600 to-yellow-500', description: 'Desbloqueou 10+ conquistas' },
-  { id: 'nobre', title: '👑 Nobre', requirement: 8, color: 'bg-gradient-to-r from-purple-500 to-purple-700', description: 'Desbloqueou 8+ conquistas' },
-  { id: 'veterano', title: '⭐ Veterano', requirement: 6, color: 'bg-gradient-to-r from-green-500 to-green-700', description: 'Desbloqueou 6+ conquistas' },
-  { id: 'onipotente', title: '🧠 Onipotente', requirement: 5, color: 'bg-gradient-to-r from-pink-500 to-red-500', description: 'Desbloqueou 5+ conquistas' },
-  { id: 'expert', title: '🚀 Expert', requirement: 4, color: 'bg-gradient-to-r from-blue-500 to-blue-700', description: 'Desbloqueou 4+ conquistas' },
-  { id: 'cranio', title: '💀 Crânio', requirement: 3, color: 'bg-gradient-to-r from-gray-600 to-gray-800', description: 'Desbloqueou 3+ conquistas' },
-  { id: 'sabido', title: '🤓 Sabido', requirement: 2, color: 'bg-gradient-to-r from-green-400 to-blue-500', description: 'Desbloqueou 2+ conquistas' },
-  { id: 'noob', title: '🐣 Noob', requirement: 1, color: 'bg-gradient-to-r from-yellow-300 to-orange-400', description: 'Desbloqueou sua primeira conquista' },
-  { id: 'iniciante', title: '👶 Iniciante', requirement: 0, color: 'bg-gray-200 text-gray-700', description: 'Bem-vindo ao sistema!' }
+  { id: 'supremo', title: '🌟 Deus Supremo', requirement: 30, color: 'bg-gradient-to-r from-amber-500 to-orange-600 border-amber-400', description: 'Desbloqueou 30+ conquistas' },
+  { id: 'transcendente', title: '⚡ Transcendente', requirement: 25, color: 'bg-gradient-to-r from-violet-600 to-purple-700 border-violet-500', description: 'Desbloqueou 25+ conquistas' },
+  { id: 'lendario', title: '🔥 Lendário', requirement: 20, color: 'bg-gradient-to-r from-red-600 to-rose-700 border-red-500', description: 'Desbloqueou 20+ conquistas' },
+  { id: 'imortal', title: '💎 Imortal', requirement: 15, color: 'bg-gradient-to-r from-blue-600 to-indigo-700 border-blue-500', description: 'Desbloqueou 15+ conquistas' },
+  { id: 'conquistador', title: '⚔️ Conquistador', requirement: 12, color: 'bg-gradient-to-r from-slate-700 to-slate-800 border-slate-600', description: 'Desbloqueou 12+ conquistas' },
+  { id: 'mestre', title: '🏆 Mestre', requirement: 10, color: 'bg-gradient-to-r from-yellow-500 to-amber-600 border-yellow-400', description: 'Desbloqueou 10+ conquistas' },
+  { id: 'nobre', title: '👑 Nobre', requirement: 8, color: 'bg-gradient-to-r from-purple-600 to-purple-800 border-purple-500', description: 'Desbloqueou 8+ conquistas' },
+  { id: 'veterano', title: '⭐ Veterano', requirement: 6, color: 'bg-gradient-to-r from-emerald-600 to-green-700 border-emerald-500', description: 'Desbloqueou 6+ conquistas' },
+  { id: 'onipotente', title: '🧠 Onipotente', requirement: 5, color: 'bg-gradient-to-r from-pink-600 to-rose-700 border-pink-500', description: 'Desbloqueou 5+ conquistas' },
+  { id: 'expert', title: '🚀 Expert', requirement: 4, color: 'bg-gradient-to-r from-sky-600 to-blue-700 border-sky-500', description: 'Desbloqueou 4+ conquistas' },
+  { id: 'cranio', title: '💀 Crânio', requirement: 3, color: 'bg-gradient-to-r from-gray-700 to-gray-800 border-gray-600', description: 'Desbloqueou 3+ conquistas' },
+  { id: 'sabido', title: '🤓 Sabido', requirement: 2, color: 'bg-gradient-to-r from-teal-600 to-cyan-700 border-teal-500', description: 'Desbloqueou 2+ conquistas' },
+  { id: 'noob', title: '🐣 Noob', requirement: 1, color: 'bg-gradient-to-r from-orange-500 to-amber-600 border-orange-400', description: 'Desbloqueou sua primeira conquista' },
+  { id: 'iniciante', title: '👶 Iniciante', requirement: 0, color: 'bg-gradient-to-r from-gray-400 to-gray-500 border-gray-400 text-white', description: 'Bem-vindo ao sistema!' }
 ];
 
 export const getUserTitle = (achievements: any[], selectedTitleId?: string, isOwnProfile: boolean = false): { title: string; color: string } => {

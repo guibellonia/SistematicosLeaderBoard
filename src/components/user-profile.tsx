@@ -167,9 +167,9 @@ export const UserProfile: React.FC<UserProfileProps> = ({ targetUser, onBackToOw
             <div className="flex-1">
               <CardTitle>{user.username || 'Usuário'}</CardTitle>
               <div className="my-2">
-                <Badge className={`${userTitle.color} text-white font-semibold text-sm px-3 py-1 shadow-lg`}>
-                  {userTitle.title}
-                </Badge>
+                <div className={`inline-flex items-center px-3 py-1.5 rounded-lg border text-white font-medium text-sm shadow-lg title-badge badge-glow ${userTitle.color}`}>
+                  <span className="drop-shadow-sm">{userTitle.title}</span>
+                </div>
               </div>
               <CardDescription>
                 {user.createdAt 
@@ -288,7 +288,7 @@ export const UserProfile: React.FC<UserProfileProps> = ({ targetUser, onBackToOw
             {calculateEarnedTitles(achievements).map((titleInfo) => (
               <div
                 key={titleInfo.id}
-                className={`p-4 rounded-lg border transition-all hover:scale-105 ${titleInfo.color} text-white shadow-lg`}
+                className={`p-4 rounded-xl border-2 transition-all hover:scale-105 title-badge ${titleInfo.color} text-white shadow-lg`}
               >
                 <div className="flex items-center justify-between">
                   <div>

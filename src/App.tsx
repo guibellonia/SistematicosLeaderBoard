@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { AuthProvider, useAuth } from './components/auth-context';
+import { ThemeProvider } from './components/theme-context';
 import { useSession } from './components/use-session';
 import { Layout } from './components/layout';
 import { LoginPage } from './components/login-page';
@@ -83,9 +84,11 @@ const AppContent: React.FC = () => {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <AppContent />
-      <Toaster />
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <AppContent />
+        <Toaster />
+      </AuthProvider>
+    </ThemeProvider>
   );
 }
