@@ -8,6 +8,8 @@ import { Dashboard } from './components/dashboard';
 import { Leaderboard } from './components/leaderboard';
 import { Profile } from './components/profile';
 import { UserProfile } from './components/user-profile';
+import { AutoSecurityCleanup } from './components/auto-security-cleanup';
+import { TokenValidator } from './components/token-validator';
 import { Toaster } from './components/ui/sonner';
 
 const AppContent: React.FC = () => {
@@ -86,6 +88,8 @@ export default function App() {
   return (
     <ThemeProvider>
       <AuthProvider>
+        <AutoSecurityCleanup />
+        <TokenValidator />
         <AppContent />
         <Toaster />
       </AuthProvider>

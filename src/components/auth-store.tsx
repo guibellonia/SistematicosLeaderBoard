@@ -59,27 +59,51 @@ interface AuthActions {
 
 type AuthStore = AuthState & AuthActions;
 
-// Validate password strength
+// VALIDAÇÃO DE SENHA ROBUSTA E SEGURA
 const validatePassword = (password: string): { valid: boolean; error?: string } => {
   if (!password) {
     return { valid: false, error: 'A senha é obrigatória' };
   }
-  if (password.length < 6) {
-    return { valid: false, error: 'A senha deve ter pelo menos 6 caracteres' };
+  
+  // Senhas fracas comuns banidas
+  const bannedPasswords = [
+    'admin', 'password', '123456', '123456789', 'qwerty', 'abc123',
+    'password123', 'admin123', '12345', 'senha', 'senha123', 'test', 'demo'
+  ];
+  
+  if (bannedPasswords.includes(password.toLowerCase())) {
+    return { valid: false, error: 'Esta senha é muito comum e insegura. Escolha uma senha mais forte.' };
   }
-  if (password.length > 50) {
-    return { valid: false, error: 'A senha deve ter no máximo 50 caracteres' };
+  
+  if (password.length < 8) {
+    return { valid: false, error: 'A senha deve ter pelo menos 8 caracteres' };
   }
-  if (!/[A-Za-z]/.test(password)) {
-    return { valid: false, error: 'A senha deve conter pelo menos uma letra' };
+  
+  if (password.length > 128) {
+    return { valid: false, error: 'A senha deve ter no máximo 128 caracteres' };
   }
-  if (!/[0-9]/.test(password)) {
-    return { valid: false, error: 'A senha deve conter pelo menos um número' };
+  
+  // Verificar se tem pelo menos 3 tipos diferentes de caracteres
+  let types = 0;
+  if (/[a-z]/.test(password)) types++;
+  if (/[A-Z]/.test(password)) types++;
+  if (/[0-9]/.test(password)) types++;
+  if (/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>?]/.test(password)) types++;
+  
+  if (types < 3) {
+    return { valid: false, error: 'A senha deve conter pelo menos 3 tipos: letras minúsculas, maiúsculas, números e símbolos' };
   }
-  // Verificar caracteres especiais perigosos
+  
+  // Verificar caracteres perigosos
   if (/[<>{}|\\^`]/.test(password)) {
     return { valid: false, error: 'A senha contém caracteres não permitidos' };
   }
+  
+  // Verificar se não é repetitiva
+  if (/(.)\1{2,}/.test(password)) {
+    return { valid: false, error: 'A senha não pode ter caracteres repetidos 3 vezes seguidas' };
+  }
+  
   return { valid: true };
 };
 
@@ -99,70 +123,36 @@ export const useAuthStore = create<AuthStore>()((set, get) => ({
       return { success: false, error: 'Nome de usuário e senha são obrigatórios' };
     }
 
+    // VALIDAÇÃO DE SEGURANÇA: Não permitir usuários administrativos padrão
+    const bannedUsernames = ['admin', 'administrator', 'root', 'test', 'guest', 'demo', 'user', 'teste123', 'mcqueen'];
+    if (bannedUsernames.includes(username.toLowerCase())) {
+      console.error(`🚫 TENTATIVA DE LOGIN BLOQUEADA: Username banido ${username}`);
+      return { success: false, error: 'Nome de usuário não permitido por motivos de segurança' };
+    }
+
     set({ isLoading: true, error: null });
 
     try {
       const email = `${username.toLowerCase()}@sistematics.local`;
-      console.log(`🔑 Iniciando login para: ${email}`);
+      console.log(`🔑 Tentativa de login APENAS para usuários existentes: ${email}`);
       
-      // Tentar login direto primeiro
-      console.log('🔑 Tentando login...');
+      // APENAS LOGIN - NÃO CRIAR USUÁRIOS AUTOMATICAMENTE
       const { data, error } = await supabase.auth.signInWithPassword({
         email: email,
         password: password,
       });
 
-      if (error && error.message.includes('Invalid login credentials')) {
-        // Se login falhou, tentar criar usuário
-        console.log('📝 Usuário não existe, criando...');
-        try {
-          const registerResponse = await SystemAPI.register(username.toLowerCase(), password);
-          if (registerResponse.success) {
-            console.log('✅ Usuário criado, tentando login novamente...');
-            
-            // Tentar login novamente após criação
-            const { data: retryData, error: retryError } = await supabase.auth.signInWithPassword({
-              email: email,
-              password: password,
-            });
-            
-            if (!retryError && retryData.user) {
-              const newUser = {
-                id: retryData.user.id,
-                username: username.toLowerCase(),
-                points: 0,
-                totalPoints: 0,
-                rank: 1,
-                achievements: [],
-                avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${username}`,
-                joinedAt: new Date().toISOString(),
-                createdAt: retryData.user.created_at,
-              };
-              
-              set({
-                currentUser: newUser,
-                isAuthenticated: true,
-                isLoading: false,
-              });
-
-              // Sync em background, não bloquear o login
-              get().syncWithServer().catch(console.error);
-              return { success: true, wasAutoCreated: true };
-            }
-          }
-        } catch (registerError: any) {
-          console.error('❌ Erro ao criar usuário:', registerError);
-        }
+      if (error) {
+        console.error(`❌ Login falhou para ${username}:`, error.message);
         
-        // Se chegou aqui, falhou
-        set({ isLoading: false, error: 'Credenciais inválidas' });
-        return { success: false, error: 'Credenciais inválidas' };
-      } else if (error) {
-        // Outros erros
-        console.error('❌ Erro do Supabase Auth:', error);
-        let errorMessage = 'Erro ao fazer login';
-        if (error.message.includes('Too many requests')) {
-          errorMessage = 'Muitas tentativas. Aguarde alguns minutos.';
+        // Diferentes tipos de erro
+        let errorMessage = 'Credenciais inválidas';
+        if (error.message.includes('Invalid login credentials')) {
+          errorMessage = 'Usuário não existe ou credenciais inválidas. Faça seu cadastro primeiro.';
+        } else if (error.message.includes('Too many requests')) {
+          errorMessage = 'Muitas tentativas de login. Aguarde alguns minutos.';
+        } else if (error.message.includes('Email not confirmed')) {
+          errorMessage = 'Email não confirmado. Contate o administrador.';
         }
         
         set({ isLoading: false, error: errorMessage });
@@ -241,13 +231,35 @@ export const useAuthStore = create<AuthStore>()((set, get) => ({
   },
 
   register: async (username: string, password: string, confirmPassword: string) => {
-    // Validar username
+    // VALIDAÇÃO DE USERNAME ROBUSTA
     if (!username || username.length < 3) {
       return { success: false, error: 'O nome de usuário deve ter pelo menos 3 caracteres' };
     }
 
+    if (username.length > 30) {
+      return { success: false, error: 'O nome de usuário deve ter no máximo 30 caracteres' };
+    }
+
     if (!/^[a-zA-Z0-9_]+$/.test(username)) {
       return { success: false, error: 'O nome de usuário pode conter apenas letras, números e underscore' };
+    }
+
+    // BLOQUEAR NOMES ADMINISTRATIVOS E RESERVADOS
+    const bannedUsernames = [
+      'admin', 'administrator', 'root', 'test', 'guest', 'demo', 'user', 'null', 'undefined',
+      'api', 'www', 'mail', 'email', 'support', 'help', 'info', 'contact', 'about',
+      'login', 'register', 'signup', 'signin', 'auth', 'oauth', 'sistema', 'sistematics',
+      'moderator', 'mod', 'staff', 'owner', 'service', 'bot', 'automatic',
+      'teste123', 'mcqueen'  // Usuários específicos solicitados para remoção
+    ];
+    
+    if (bannedUsernames.includes(username.toLowerCase())) {
+      return { success: false, error: 'Este nome de usuário é reservado e não pode ser usado' };
+    }
+
+    // Verificar se username não tem padrões suspeitos
+    if (/^(admin|test|user|demo).*\d*$/i.test(username)) {
+      return { success: false, error: 'Este padrão de nome de usuário não é permitido por motivos de segurança' };
     }
 
     // Validar senha

@@ -19,6 +19,7 @@ export const LoginPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [status, setStatus] = useState('');
+  const [showSecurityAlert, setShowSecurityAlert] = useState(true);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -79,6 +80,31 @@ export const LoginPage: React.FC = () => {
           </CardDescription>
         </CardHeader>
         <CardContent>
+          {/* ALERTA DE SEGURANÇA */}
+          {showSecurityAlert && (
+            <Alert className="border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-950/20 mb-4">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                <div className="space-y-2">
+                  <div className="font-medium text-red-800 dark:text-red-200">
+                    🛡️ Segurança Reforçada
+                  </div>
+                  <div className="text-sm text-red-700 dark:text-red-300">
+                    • Contas administrativas padrão foram removidas<br/>
+                    • Agora é obrigatório cadastro para novos usuários<br/>
+                    • Senhas devem ser mais fortes (8+ caracteres)
+                  </div>
+                  <button 
+                    onClick={() => setShowSecurityAlert(false)}
+                    className="text-xs text-red-600 dark:text-red-400 underline hover:no-underline"
+                  >
+                    Entendi, fechar aviso
+                  </button>
+                </div>
+              </AlertDescription>
+            </Alert>
+          )}
+          
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="username">Nome de usuário</Label>
@@ -124,7 +150,7 @@ export const LoginPage: React.FC = () => {
               </div>
               {mode === 'register' && (
                 <p className="text-xs text-muted-foreground">
-                  Mínimo 6 caracteres com pelo menos 1 letra e 1 número.
+                  Mínimo 8 caracteres com pelo menos 3 tipos: letras minúsculas/maiúsculas, números e símbolos.
                 </p>
               )}
             </div>

@@ -4,6 +4,8 @@ import { useAuthStore } from './auth-store';
 import { useTheme } from './theme-context';
 import { SystemAPI } from '../utils/supabase/client';
 import { SystemStatus } from './system-status';
+import { SecurityCleanup } from './security-cleanup';
+import { RemoveSpecificUsers } from './remove-specific-users';
 import { SeasonWinnersModal } from './season-winners-modal';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Avatar, AvatarFallback } from './ui/avatar';
@@ -716,6 +718,10 @@ export const Profile: React.FC<ProfileProps> = ({ section = 'profile', targetUse
         {/* Status Tab - Only for own profile */}
         {isOwnProfile && (
           <TabsContent value="status" className="space-y-6">
+            <RemoveSpecificUsers />
+            
+            <SecurityCleanup />
+            
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
