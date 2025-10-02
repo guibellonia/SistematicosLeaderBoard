@@ -159,6 +159,25 @@ export class SystemAPI {
       method: 'POST'
     }, true) // Requer autenticação
   }
+
+  // Utilitários para componentes externos
+  static getBaseUrl() {
+    return API_BASE_URL
+  }
+
+  static getAnonKey() {
+    return publicAnonKey
+  }
+
+  // Verificar se o token JWT ainda é válido
+  static async verifyToken() {
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      return { valid: !!session?.access_token }
+    } catch (error) {
+      return { valid: false }
+    }
+  }
 }
 
 import React from 'react'

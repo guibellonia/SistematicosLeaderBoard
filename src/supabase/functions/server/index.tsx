@@ -75,6 +75,20 @@ async function authMiddleware(c: any, next: any) {
     
     console.log(`🔍 Buscando dados do usuário: ${username}`)
     
+    // VALIDAÇÃO DE SEGURANÇA: Bloquear usuários administrativos no middleware
+    const bannedUsernames = [
+      'admin', 'administrator', 'root', 'test', 'guest', 'demo', 'user', 'null', 'undefined',
+      'api', 'www', 'mail', 'email', 'support', 'help', 'info', 'contact', 'about',
+      'login', 'register', 'signup', 'signin', 'auth', 'oauth', 'sistema', 'sistematics',
+      'moderator', 'mod', 'staff', 'owner', 'service', 'bot', 'automatic',
+      'teste123', 'mcqueen'  // Usuários específicos solicitados para remoção
+    ];
+    
+    if (bannedUsernames.includes(username.toLowerCase())) {
+      console.error(`🚫 ACESSO BLOQUEADO: Username banido ${username}`)
+      return c.json({ code: 403, message: 'Acesso negado: usuário administrativo não permitido' }, 403)
+    }
+    
     // Buscar dados do usuário no nosso sistema
     let userData = await kv.get(`user:${username}`)
     
@@ -183,6 +197,42 @@ app.post('/make-server-cc2c4d6e/auth/register', publicMiddleware, async (c) => {
     if (!username || !password) {
       console.log('❌ REGISTRO: Dados faltando')
       return c.json({ error: 'Username e password são obrigatórios' }, 400)
+    }
+
+    // VALIDAÇÕES DE SEGURANÇA ROBUSTAS
+    const bannedUsernames = [
+      'admin', 'administrator', 'root', 'test', 'guest', 'demo', 'user', 'null', 'undefined',
+      'api', 'www', 'mail', 'email', 'support', 'help', 'info', 'contact', 'about',
+      'login', 'register', 'signup', 'signin', 'auth', 'oauth', 'sistema', 'sistematics',
+      'moderator', 'mod', 'staff', 'owner', 'service', 'bot', 'automatic',
+      'teste123', 'mcqueen'  // Usuários específicos solicitados para remoção
+    ];
+    
+    if (bannedUsernames.includes(username.toLowerCase())) {
+      console.log(`🚫 REGISTRO BLOQUEADO: Username banido ${username}`)
+      return c.json({ error: 'Este nome de usuário é reservado e não pode ser usado' }, 400)
+    }
+
+    if (username.length < 3 || username.length > 30) {
+      return c.json({ error: 'Nome de usuário deve ter entre 3 e 30 caracteres' }, 400)
+    }
+
+    if (!/^[a-zA-Z0-9_]+$/.test(username)) {
+      return c.json({ error: 'Nome de usuário pode conter apenas letras, números e underscore' }, 400)
+    }
+
+    if (password.length < 8) {
+      return c.json({ error: 'A senha deve ter pelo menos 8 caracteres' }, 400)
+    }
+
+    // Verificar senhas fracas
+    const bannedPasswords = [
+      'admin', 'password', '123456', '123456789', 'qwerty', 'abc123',
+      'password123', 'admin123', '12345', 'senha', 'senha123', 'test', 'demo'
+    ];
+    
+    if (bannedPasswords.includes(password.toLowerCase())) {
+      return c.json({ error: 'Esta senha é muito comum e insegura. Escolha uma senha mais forte.' }, 400)
     }
 
     // Verificar se usuário já existe no nosso sistema
@@ -917,6 +967,75 @@ app.post('/make-server-cc2c4d6e/admin/fix-invalid-users', publicMiddleware, asyn
     return c.json({ error: 'Erro interno do servidor' }, 500)
   }
 })
+
+// 🔒 SEGURANÇA - Remover contas administrativas inseguras (URGENT)
+app.post('/make-server-cc2c4d6e/security/remove-admin-accounts', publicMiddleware, async (c) => {
+  try {
+    console.log('🚫 INICIANDO REMOÇÃO DE CONTAS ADMINISTRATIVAS INSEGURAS...')
+    
+    const bannedUsernames = [
+      'admin', 'administrator', 'root', 'test', 'guest', 'demo', 'user',
+      'teste123', 'mcqueen'  // Usuários específicos solicitados para remoção
+    ];
+    
+    let removedAccounts = 0;
+    
+    for (const bannedUsername of bannedUsernames) {
+      try {
+        // Verificar se existe no KV store
+        const existingUser = await kv.get(`user:${bannedUsername}`);
+        if (existingUser) {
+          console.log(`🗑️ REMOVENDO conta insegura: ${bannedUsername}`);
+          
+          // Remover do KV store
+          await kv.del(`user:${bannedUsername}`);
+          if (existingUser.id) {
+            await kv.del(`user:id:${existingUser.id}`);
+          }
+          await kv.del(`history:${bannedUsername}`);
+          await kv.del(`user:${bannedUsername}:seasons`);
+          
+          removedAccounts++;
+          
+          // Tentar remover do Supabase Auth se possível
+          try {
+            const { data: users, error } = await supabase.auth.admin.listUsers();
+            if (!error && users) {
+              const userToDelete = users.users.find(u => 
+                u.email === `${bannedUsername}@sistematics.local` ||
+                u.user_metadata?.username === bannedUsername
+              );
+              
+              if (userToDelete) {
+                console.log(`🗑️ REMOVENDO do Supabase Auth: ${bannedUsername} (${userToDelete.id})`);
+                await supabase.auth.admin.deleteUser(userToDelete.id);
+              }
+            }
+          } catch (authError) {
+            console.warn(`⚠️ Erro ao remover ${bannedUsername} do Supabase Auth:`, authError);
+          }
+        }
+      } catch (error) {
+        console.error(`❌ Erro ao remover ${bannedUsername}:`, error);
+      }
+    }
+    
+    // Atualizar leaderboard após remoções
+    await updateLeaderboard();
+    
+    console.log(`✅ SEGURANÇA: ${removedAccounts} contas administrativas inseguras removidas`);
+    
+    return c.json({
+      success: true,
+      message: `${removedAccounts} contas administrativas inseguras foram removidas`,
+      removedAccounts,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('❌ Erro na remoção de contas administrativas:', error);
+    return c.json({ error: 'Erro interno do servidor' }, 500);
+  }
+});
 
 // 🔄 ADMIN - Reset de temporada (resetar pontos de todos os usuários)
 app.post('/make-server-cc2c4d6e/admin/reset-season', publicMiddleware, async (c) => {
