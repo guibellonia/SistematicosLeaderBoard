@@ -219,10 +219,11 @@ const pointReasons = {
   ],
 
   negativos: [
-    { id: "atraso-aula", label: "Chegar atrasado na aula", points: -5 },
-    { id: "faltar-aula", label: "Faltar aula sem motivo", points: -15 },
-    { id: "não-entregar-trabalho", label: "Não entregar trabalho", points: -20 },
+    { id: "atraso-aula", label: "Chegar atrasado na aula", points: -2 },
+    { id: "faltar-aula", label: "Faltar aula sem motivo", points: -5 },
+    { id: "ir-so-pela-chamada", label: "Chegar na hora da chamada", points: -7 },
     { id: "não-resolver-aps", label: "Não resolver APS", points: -10 },
+    { id: "não-entregar-trabalho", label: "Não entregar trabalho", points: -20 },
     { id: "registrar-ponto-falso", label: "Tentar registrar ponto falso", points: -50 },
   ]
 };
@@ -895,7 +896,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                     <SelectLabel>❌ Negativos</SelectLabel>
                     {pointReasons.negativos.map((reason) => (
                       <SelectItem key={reason.id} value={reason.id}>
-                        {reason.label} (-{reason.points} pontos)
+                        {reason.label} ({reason.points} pontos)
                       </SelectItem>
                     ))}
                   </SelectGroup>
