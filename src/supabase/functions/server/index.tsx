@@ -333,6 +333,103 @@ app.post('/make-server-cc2c4d6e/auth/register', publicMiddleware, async (c) => {
   }
 })
 
+// 📊 PONTOS - Adicionar ponto para outro usuário (requer autenticação)
+app.post('/make-server-cc2c4d6e/points/add-for-user', authMiddleware, async (c) => {
+  try {
+    const { targetUsername, reason, points, reasonId } = await c.req.json()
+    const currentUser = c.get('currentUser')
+    const supabaseUser = c.get('supabaseUser')
+    
+    if (!currentUser || !supabaseUser) {
+      console.error('❌ Usuário não encontrado no contexto de autenticação')
+      return c.json({ error: 'Usuário não autenticado' }, 401)
+    }
+    
+    console.log(`🎯 ${currentUser.username} registrando ponto para: ${targetUsername}, ${reason}, ${points}`)
+    
+    // Validar dados de entrada
+    if (!targetUsername || !reason || typeof points !== 'number' || points <= 0) {
+      console.error(`❌ Dados inválidos: targetUsername=${targetUsername}, reason=${reason}, points=${points}`)
+      return c.json({ error: 'Dados inválidos' }, 400)
+    }
+    
+    // Buscar usuário alvo
+    const targetUser = await kv.get(`user:${targetUsername}`)
+    if (!targetUser) {
+      console.error(`❌ Usuário alvo ${targetUsername} não encontrado`)
+      return c.json({ error: 'Usuário alvo não encontrado' }, 404)
+    }
+    
+    console.log(`📊 Usuário alvo encontrado: ${targetUsername} com ${targetUser.totalPoints || 0} pontos totais`)
+    
+    // Atualizar pontos do usuário alvo
+    const pontosAntesUpdate = targetUser.totalPoints || 0
+    const pontosTemporadaAntes = targetUser.points || 0
+    targetUser.points = (targetUser.points || 0) + points // Pontos da temporada atual
+    targetUser.totalPoints = (targetUser.totalPoints || 0) + points // Pontos históricos totais
+    await kv.set(`user:${targetUsername}`, targetUser)
+    
+    console.log(`📊 Pontos atualizados para ${targetUsername}:`)
+    console.log(`   Total: ${pontosAntesUpdate} -> ${targetUser.totalPoints} (+${points})`)
+    console.log(`   Temporada: ${pontosTemporadaAntes} -> ${targetUser.points} (+${points})`)
+    
+    // Registrar no histórico (registrado por quem adicionou)
+    const record = {
+      id: crypto.randomUUID(),
+      username: targetUsername, // Quem recebeu os pontos
+      userId: targetUser.id,
+      reason: `${reason} (registrado por ${currentUser.username})`, // Incluir quem registrou
+      reasonId: reasonId || reason,
+      points,
+      timestamp: new Date().toISOString(),
+      date: new Date().toLocaleDateString('pt-BR'),
+      avatar: targetUser.avatar,
+      addedBy: currentUser.username // Campo adicional para rastrear quem adicionou
+    }
+    
+    // Histórico individual do usuário alvo
+    const historyKey = `history:${targetUsername}`
+    const history = await kv.get(historyKey) || []
+    history.unshift(record)
+    
+    // Manter apenas os últimos 100 registros
+    if (history.length > 100) {
+      history.splice(100)
+    }
+    
+    await kv.set(historyKey, history)
+    
+    // Histórico global
+    const globalHistory = await kv.get('history:global') || []
+    globalHistory.unshift(record)
+    
+    // Manter apenas os últimos 500 registros globais
+    if (globalHistory.length > 500) {
+      globalHistory.splice(500)
+    }
+    
+    await kv.set('history:global', globalHistory)
+    
+    // Atualizar leaderboard
+    await updateLeaderboard()
+    
+    // Verificar conquistas para o usuário alvo
+    await checkAchievements(targetUsername, targetUser)
+    
+    console.log(`✅ Ponto adicionado por ${currentUser.username} para ${targetUsername}`)
+    
+    return c.json({ 
+      success: true, 
+      user: { ...targetUser, password: undefined },
+      record,
+      message: `Ponto registrado para ${targetUsername} por ${currentUser.username}`
+    })
+  } catch (error) {
+    console.error('Erro ao adicionar ponto para outro usuário:', error)
+    return c.json({ error: 'Erro interno do servidor' }, 500)
+  }
+})
+
 // 📊 PONTOS - Adicionar ponto (requer autenticação)
 app.post('/make-server-cc2c4d6e/points/add', authMiddleware, async (c) => {
   try {

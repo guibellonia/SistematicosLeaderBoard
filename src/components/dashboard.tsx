@@ -13,7 +13,9 @@ import {
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "./ui/select";
@@ -26,6 +28,7 @@ import {
   TableRow,
 } from "./ui/table";
 import { Badge } from "./ui/badge";
+import { Checkbox } from "./ui/checkbox";
 import {
   Avatar,
   AvatarFallback,
@@ -39,156 +42,182 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "./ui/pagination";
-import { Clock, Target, Plus, Trophy } from "lucide-react";
+import { Clock, Target, Plus, Trophy, Users, ChevronDown } from "lucide-react";
 import { toast } from "sonner@2.0.3";
 import { UserCard } from "./user-card";
 
-// Motivos de pontos atualizados
-const pointReasons = [
-  // Motivos Acadêmicos
-  {
-    id: "avaliacao-total",
-    label: "Tirar total em avaliação",
-    points: 25,
-  },
-  {
-    id: "avaliacao-9",
-    label: "Tirar 9+ em avaliação",
-    points: 15,
-  },
-  {
-    id: "trabalho-excelente",
-    label: "Entregar trabalho excelente",
-    points: 20,
-  },
-  {
-    id: "apresentacao-aula",
-    label: "Fazer apresentação em aula",
-    points: 12,
-  },
-  { id: "resolver-aps", label: "Resolver APS", points: 8 },
-  {
-    id: "participar-aula",
-    label: "Participação ativa na aula",
-    points: 5,
-  },
+// Motivos de pontos organizados por categorias
+const pointReasons = {
+  academicos: [
+    { id: "avaliacao-total", label: "Tirar total em avaliação", points: 25 },
+    { id: "avaliacao-9", label: "Tirar 9+ em avaliação", points: 15 },
+    { id: "trabalho-excelente", label: "Entregar trabalho excelente", points: 20 },
+    { id: "apresentacao-aula", label: "Fazer apresentação em aula", points: 12 },
+    { id: "resolver-aps", label: "Resolver APS", points: 8 },
+    { id: "participar-aula", label: "Participação ativa na aula", points: 5 },
+    { id: "seminario", label: "Apresentar seminário", points: 18 },
+    { id: "projeto-final", label: "Entregar projeto final exemplar", points: 30 },
+    { id: "monitoria", label: "Dar monitoria", points: 12 },
+    { id: "estudo-grupo", label: "Organizar grupo de estudos", points: 10 },
+  ],
+  
+  tecnicos: [
+    { id: "resolver-problema", label: "Resolver problema complexo", points: 20 },
+    { id: "documentacao", label: "Escrever documentação", points: 8 },
+    { id: "review-codigo", label: "Review de código detalhado", points: 6 },
+    { id: "bug-fix", label: "Corrigir bug crítico", points: 15 },
+    { id: "feature-nova", label: "Implementar nova funcionalidade", points: 18 },
+    { id: "otimizacao", label: "Otimizar performance", points: 12 },
+    { id: "refatoracao", label: "Refatorar código legado", points: 14 },
+    { id: "automacao", label: "Criar automação/script útil", points: 16 },
+    { id: "deploy", label: "Fazer deploy sem quebrar nada", points: 10 },
+    { id: "backup", label: "Salvar o projeto de disaster", points: 25 },
+  ],
 
-  // Motivos Técnicos
-  {
-    id: "resolver-problema",
-    label: "Resolver problema complexo",
-    points: 20,
-  },
-  {
-    id: "documentacao",
-    label: "Escrever documentação",
-    points: 8,
-  },
-  {
-    id: "review-codigo",
-    label: "Review de código detalhado",
-    points: 6,
-  },
-  { id: "bug-fix", label: "Corrigir bug crítico", points: 15 },
-  {
-    id: "feature-nova",
-    label: "Implementar nova funcionalidade",
-    points: 18,
-  },
-  {
-    id: "otimizacao",
-    label: "Otimizar performance",
-    points: 12,
-  },
+  confraternizacao: [
+    { id: "organizar-churrasco", label: "Organizar churrasco da galera", points: 20 },
+    { id: "participar-churrasco", label: "Participar do churrasco", points: 8 },
+    { id: "trazer-bebida-churrasco", label: "Trazer bebida pro churrasco", points: 10 },
+    { id: "fazer-carne-churrasco", label: "Fazer a carne no churrasco", points: 15 },
+    { id: "organizar-festa", label: "Organizar festa da turma", points: 18 },
+    { id: "aniversario", label: "Organizar aniversário de colega", points: 12 },
+    { id: "coffee-break", label: "Organizar coffee break", points: 5 },
+    { id: "happy-hour", label: "Organizar happy hour", points: 10 },
+    { id: "amigo-secreto", label: "Organizar amigo secreto", points: 8 },
+    { id: "karaoke", label: "Organizar karaokê da galera", points: 15 },
+    { id: "pizza-noite", label: "Organizar pizza na madrugada", points: 12 },
+    { id: "game-night", label: "Organizar noite de jogos", points: 10 },
+  ],
 
-  // Motivos Sociais
-  {
-    id: "ajudar-colega",
-    label: "Ajudar um colega",
-    points: 10,
-  },
-  {
-    id: "mentoria",
-    label: "Dar mentoria para alguém",
-    points: 15,
-  },
-  {
-    id: "explicar-materia",
-    label: "Explicar matéria para a turma",
-    points: 12,
-  },
-  {
-    id: "trabalho-grupo",
-    label: "Liderar trabalho em grupo",
-    points: 10,
-  },
+  companheirismo: [
+    { id: "ajudar-colega", label: "Ajudar um colega", points: 10 },
+    { id: "mentoria", label: "Dar mentoria para alguém", points: 15 },
+    { id: "explicar-materia", label: "Explicar matéria para a turma", points: 12 },
+    { id: "trabalho-grupo", label: "Liderar trabalho em grupo", points: 10 },
+    { id: "emprestar-material", label: "Emprestar material/equipamento", points: 5 },
+    { id: "carona", label: "Dar carona para os colegas", points: 6 },
+    { id: "lanche-compartilhar", label: "Compartilhar lanche com galera", points: 4 },
+    { id: "consolar-colega", label: "Consolar colega após prova difícil", points: 8 },
+    { id: "motivar-equipe", label: "Motivar a equipe", points: 10 },
+    { id: "mediar-conflito", label: "Mediar conflito entre colegas", points: 15 },
+    { id: "acolher-novato", label: "Acolher/integrar novato na turma", points: 12 },
+    { id: "dividir-conhecimento", label: "Dividir conhecimento técnico", points: 8 },
+  ],
 
-  // Motivos de Eventos
-  {
-    id: "primeiro-expotech",
-    label: "Primeiro Lugar na ExpoTech",
-    points: 100,
-  },
-  {
-    id: "segundo-expotech",
-    label: "Segundo Lugar na ExpoTech",
-    points: 80,
-  },
-  {
-    id: "terceiro-expotech",
-    label: "Terceiro Lugar na ExpoTech",
-    points: 60,
-  },
-  {
-    id: "participar-expotech",
-    label: "Participar da ExpoTech",
-    points: 20,
-  },
-  {
-    id: "hackathon-winner",
-    label: "Ganhar Hackathon",
-    points: 75,
-  },
-  {
-    id: "hackathon-participant",
-    label: "Participar de Hackathon",
-    points: 25,
-  },
-  { id: "palestra", label: "Dar palestra", points: 30 },
-  { id: "workshop", label: "Ministrar workshop", points: 25 },
-  {
-    id: "participar-evento",
-    label: "Participar de evento acadêmico",
-    points: 8,
-  },
+  organizacao: [
+    { id: "limpar-lab", label: "Limpar o laboratório", points: 6 },
+    { id: "organizar-sala", label: "Organizar sala de aula", points: 5 },
+    { id: "arrumacao-geral", label: "Fazer arrumação geral do espaço", points: 10 },
+    { id: "equipamentos", label: "Organizar equipamentos/cabos", points: 8 },
+    { id: "biblioteca", label: "Organizar materiais da biblioteca", points: 7 },
+    { id: "quadro-limpo", label: "Limpar quadro após aula", points: 3 },
+    { id: "lixo-reciclagem", label: "Separar lixo/reciclagem", points: 4 },
+    { id: "manutencao-preventiva", label: "Fazer manutenção preventiva", points: 12 },
+  ],
 
-  // Motivos Especiais/Humorísticos
-  {
-    id: "xingar-henaldo",
-    label: "Xingar o Henaldo",
-    points: 15,
-  },
-  {
-    id: "coffee-break",
-    label: "Organizar coffee break",
-    points: 5,
-  },
-  {
-    id: "meme-engracado",
-    label: "Fazer meme engraçado da turma",
-    points: 3,
-  },
-  {
-    id: "chegada-pontual",
-    label: "Chegar pontualmente por uma semana",
-    points: 8,
-  },
-  {
-    id: "limpar-lab",
-    label: "Limpar o laboratório",
-    points: 6,
-  },
-];
+  engajamento: [
+    { id: "meme-engracado", label: "Fazer meme engraçado da turma", points: 3 },
+    { id: "foto-turma", label: "Organizar foto da turma", points: 8 },
+    { id: "grupo-whatsapp", label: "Manter grupo WhatsApp ativo", points: 5 },
+    { id: "rede-social", label: "Postar sobre a turma nas redes", points: 6 },
+    { id: "chegada-pontual", label: "Chegar pontualmente por uma semana", points: 8 },
+    { id: "frequencia-perfeita", label: "Frequência perfeita no mês", points: 15 },
+    { id: "participacao-ativa", label: "Participação ativa em discussões", points: 7 },
+    { id: "pergunta-inteligente", label: "Fazer pergunta que ajudou todos", points: 10 },
+    { id: "ideia-projeto", label: "Sugerir ideia criativa para projeto", points: 12 },
+    { id: "feedback-construtivo", label: "Dar feedback construtivo", points: 8 },
+  ],
+
+  eventos: [
+    { id: "primeiro-expotech", label: "Primeiro Lugar na ExpoTech", points: 100 },
+    { id: "segundo-expotech", label: "Segundo Lugar na ExpoTech", points: 80 },
+    { id: "terceiro-expotech", label: "Terceiro Lugar na ExpoTech", points: 60 },
+    { id: "participar-expotech", label: "Participar da ExpoTech", points: 20 },
+    { id: "hackathon-winner", label: "Ganhar Hackathon", points: 75 },
+    { id: "hackathon-participant", label: "Participar de Hackathon", points: 25 },
+    { id: "palestra", label: "Dar palestra", points: 30 },
+    { id: "workshop", label: "Ministrar workshop", points: 25 },
+    { id: "participar-evento", label: "Participar de evento acadêmico", points: 8 },
+    { id: "feira-profissoes", label: "Participar de feira de profissões", points: 10 },
+    { id: "visita-empresa", label: "Organizar visita à empresa", points: 15 },
+  ],
+
+  xingamentos: [
+    { id: "xingar-henaldo", label: "Xingar o Henaldo", points: 15 },
+    { id: "xingar-professor-chato", label: "Xingar professor chato (respeitosamente)", points: 5 },
+    { id: "reclamar-cantina", label: "Reclamar da comida da cantina", points: 2 },
+    { id: "xingar-sistema", label: "Xingar sistema acadêmico bugado", points: 8 },
+    { id: "criticar-infraestrutura", label: "Criticar infraestrutura da faculdade", points: 6 },
+    { id: "xingar-internet", label: "Xingar internet lenta", points: 4 },
+    { id: "reclamar-ar-condicionado", label: "Reclamar do ar condicionado", points: 3 },
+    { id: "xingar-projetor", label: "Xingar projetor que não funciona", points: 3 },
+    { id: "reclamar-cadeira", label: "Reclamar da cadeira desconfortável", points: 2 },
+    { id: "xingar-elevador", label: "Xingar elevador sempre quebrado", points: 4 },
+  ],
+
+  situacoes: [
+    { id: "chegar-antes-professor", label: "Chegar antes do professor pela primeira vez", points: 5 },
+    { id: "sobreviver-segunda", label: "Sobreviver a segunda-feira de 8h", points: 10 },
+    { id: "não-dormir-aula", label: "Não dormir numa aula chata", points: 8 },
+    { id: "perguntar-duvida", label: "Perguntar dúvida que ninguém teve coragem", points: 12 },
+    { id: "defender-colega", label: "Defender colega do professor bravo", points: 15 },
+    { id: "fingir-entender", label: "Fingir que entendeu a explicação", points: 3 },
+    { id: "acordar-cedo", label: "Acordar antes das 7h voluntariamente", points: 20 },
+    { id: "trazer-lanche-saudavel", label: "Trazer lanche saudável (sem ser forçado)", points: 8 },
+    { id: "aguentar-trabalho-grupo", label: "Aguentar trabalho em grupo sem brigar", points: 18 },
+    { id: "apresentar-sem-ler", label: "Apresentar sem ler o slide", points: 25 },
+    { id: "salvar-apresentacao", label: "Salvar apresentação quando deu erro", points: 20 },
+    { id: "improvisar-projeto", label: "Improvisar projeto na última hora", points: 22 },
+  ],
+
+  diaadia: [
+    { id: "cafe-turma", label: "Trazer café para toda turma", points: 10 },
+    { id: "acordar-colega", label: "Acordar colega dormindo na aula", points: 5 },
+    { id: "emprestar-carregador", label: "Emprestar carregador/powerbank", points: 3 },
+    { id: "anotar-materia", label: "Anotar matéria para quem faltou", points: 7 },
+    { id: "lembrar-prova", label: "Lembrar turma sobre prova/trabalho", points: 8 },
+    { id: "criar-grupo-estudo", label: "Criar grupo de estudos no WhatsApp", points: 6 },
+    { id: "resumo-materia", label: "Fazer resumo e compartilhar", points: 12 },
+    { id: "xerox-galera", label: "Ir no xerox para a galera", points: 4 },
+    { id: "pagar-lanche", label: "Pagar lanche de colega sem grana", points: 8 },
+    { id: "buscar-agua", label: "Buscar água pro pessoal", points: 3 },
+    { id: "guardar-lugar", label: "Guardar lugar na fila da cantina", points: 2 },
+    { id: "dividir-uber", label: "Organizar divisão do Uber", points: 5 },
+    { id: "trazer-doce", label: "Trazer doce/bolo para turma", points: 6 },
+    { id: "emprestar-dinheiro", label: "Emprestar dinheiro (e não cobrar)", points: 10 },
+    { id: "salvar-cadeira", label: "Guardar cadeira para colega", points: 2 },
+    { id: "levar-casa", label: "Levar colega em casa", points: 6 },
+    { id: "buscar-remedio", label: "Buscar remédio para colega", points: 8 },
+  ],
+
+  esportes: [
+    { id: "organizar-pelada", label: "Organizar pelada da galera", points: 12 },
+    { id: "goleiro-pelada", label: "Ser goleiro na pelada", points: 8 },
+    { id: "trazer-bola", label: "Trazer bola para o futebol", points: 5 },
+    { id: "organizar-vôlei", label: "Organizar vôlei na quadra", points: 10 },
+    { id: "ping-pong", label: "Organizar torneio de ping pong", points: 8 },
+    { id: "caminhada-turma", label: "Organizar caminhada com a turma", points: 10 },
+    { id: "academia-galera", label: "Levar galera na academia", points: 12 },
+    { id: "corrida-matinal", label: "Organizar corrida matinal", points: 15 },
+    { id: "alongamento", label: "Ensinar alongamento pro pessoal", points: 6 },
+    { id: "hidratacao", label: "Lembrar galera de se hidratar", points: 4 },
+  ],
+
+  especiais: [
+    { id: "primeira-vez-sistema", label: "Primeira vez usando o sistema", points: 5 },
+    { id: "bug-report", label: "Reportar bug no sistema", points: 10 },
+    { id: "sugestao-melhoria", label: "Sugerir melhoria pro sistema", points: 8 },
+    { id: "virar-madrugada", label: "Virar madrugada fazendo projeto", points: 20 },
+    { id: "salvar-projeto-colega", label: "Salvar projeto de colega", points: 25 },
+    { id: "ensinar-git", label: "Ensinar Git para alguém", points: 15 },
+    { id: "resolver-merge-conflict", label: "Resolver merge conflict dos outros", points: 12 },
+    { id: "explicar-stackoverflow", label: "Explicar resposta do StackOverflow", points: 8 },
+    { id: "debug-madrugada", label: "Debugar código de madrugada", points: 15 },
+    { id: "aguentar-dupla", label: "Aguentar dupla ruim no trabalho", points: 18 },
+    { id: "apresentar-sozinho", label: "Apresentar trabalho sozinho", points: 20 },
+    { id: "salvar-pen-drive", label: "Emprestar pen drive na última hora", points: 5 },
+  ]
+};
 
 interface DashboardProps {
   onNavigateToProfile?: (username: string) => void;
@@ -212,6 +241,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const [selectedReason, setSelectedReason] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [isAddingPoint, setIsAddingPoint] = useState(false);
+  const [forOtherUser, setForOtherUser] = useState(false);
+  const [selectedTargetUser, setSelectedTargetUser] = useState("");
   const [currentSeason, setCurrentSeason] = useState<any>(null);
   const [historyData, setHistoryData] = useState<{
     history: any[];
@@ -223,6 +254,48 @@ export const Dashboard: React.FC<DashboardProps> = ({
     totalPages: 0,
   });
   const recordsPerPage = 10;
+
+  // Função helper para encontrar um motivo por ID em todas as categorias
+  const findReasonById = (id: string) => {
+    if (!id || typeof id !== 'string') return null;
+    
+    try {
+      // Debug log
+      console.log('🔍 findReasonById chamado com:', id, 'pointReasons tipo:', typeof pointReasons);
+      
+      for (const category of Object.values(pointReasons)) {
+        if (Array.isArray(category)) {
+          const reason = category.find((r) => r && r.id === id);
+          if (reason) {
+            console.log('✅ Motivo encontrado:', reason);
+            return reason;
+          }
+        }
+      }
+      console.log('❌ Motivo não encontrado para:', id);
+    } catch (error) {
+      console.error('❌ Erro ao buscar motivo:', error, 'pointReasons:', pointReasons);
+    }
+    return null;
+  };
+
+  // Reset form when checkbox is unchecked
+  React.useEffect(() => {
+    if (!forOtherUser) {
+      setSelectedTargetUser("");
+    }
+  }, [forOtherUser]);
+
+  // Debug log para verificar pointReasons
+  React.useEffect(() => {
+    console.log('🔍 Dashboard montado - pointReasons estrutura:', {
+      tipo: typeof pointReasons,
+      keys: Object.keys(pointReasons),
+      temAcademicos: Array.isArray(pointReasons.academicos)
+    });
+  }, []);
+
+
 
   // Load global history data and users info
   const loadGlobalHistory = async () => {
@@ -335,24 +408,50 @@ export const Dashboard: React.FC<DashboardProps> = ({
       return;
     }
 
-    const reason = pointReasons.find(
-      (r) => r.id === selectedReason,
-    );
+    if (forOtherUser && !selectedTargetUser) {
+      toast.error("Selecione o usuário que receberá os pontos");
+      return;
+    }
+
+    // Encontrar o motivo em todas as categorias
+    const reason = findReasonById(selectedReason);
     if (reason) {
       setIsAddingPoint(true);
       try {
+        const targetUser = forOtherUser ? selectedTargetUser : user?.username;
         console.log(
-          `🎯 Registrando ponto: ${reason.label} (+${reason.points})`,
+          `🎯 Registrando ponto para ${targetUser}: ${reason.label} (+${reason.points})`,
         );
-        await addPointRecord(
-          reason.label,
-          reason.points,
-          reason.id,
-        );
-        toast.success(
-          `Ponto registrado! +${reason.points} pontos por "${reason.label}"`,
-        );
+        
+        // Se for para outro usuário, usar uma nova função específica
+        if (forOtherUser) {
+          const response = await SystemAPI.addPointForUser(
+            targetUser,
+            reason.label,
+            reason.points,
+            reason.id,
+          );
+          if (response.success) {
+            toast.success(
+              `Ponto registrado para ${targetUser}! +${reason.points} pontos por "${reason.label}"`,
+            );
+          } else {
+            throw new Error(response.error || 'Erro ao registrar ponto para outro usuário');
+          }
+        } else {
+          await addPointRecord(
+            reason.label,
+            reason.points,
+            reason.id,
+          );
+          toast.success(
+            `Ponto registrado! +${reason.points} pontos por "${reason.label}"`,
+          );
+        }
+        
         setSelectedReason("");
+        setSelectedTargetUser("");
+        setForOtherUser(false);
 
         // Refresh global history instead of individual history
         await loadGlobalHistory();
@@ -654,41 +753,219 @@ export const Dashboard: React.FC<DashboardProps> = ({
           <CardHeader>
             <CardTitle>Registrar Ponto</CardTitle>
             <CardDescription>
-              Registre suas atividades e ganhe pontos no sistema
+              Registre atividades e distribua pontos para você ou outros usuários
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
-              <label>Motivo do Ponto</label>
+              <label className="flex items-center justify-between">
+                <span className="flex items-center gap-2">
+                  <Target className="h-4 w-4" />
+                  Motivo do Ponto
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  {Object.values(pointReasons).reduce((total, category) => total + category.length, 0)} opções
+                </span>
+              </label>
               <Select
                 value={selectedReason}
                 onValueChange={setSelectedReason}
               >
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione o motivo..." />
+                <SelectTrigger className="h-12">
+                  <SelectValue placeholder="Escolha uma atividade para pontuar..." />
                 </SelectTrigger>
-                <SelectContent>
-                  {pointReasons.map((reason) => (
-                    <SelectItem
-                      key={reason.id}
-                      value={reason.id}
-                    >
-                      {reason.label} (+{reason.points} pontos)
-                    </SelectItem>
-                  ))}
+                <SelectContent className="max-h-[300px]">
+                  <SelectGroup>
+                    <SelectLabel>📚 Acadêmicos</SelectLabel>
+                    {pointReasons.academicos.map((reason) => (
+                      <SelectItem key={reason.id} value={reason.id}>
+                        {reason.label} (+{reason.points} pontos)
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+
+                  <SelectGroup>
+                    <SelectLabel>🔧 Técnicos</SelectLabel>
+                    {pointReasons.tecnicos.map((reason) => (
+                      <SelectItem key={reason.id} value={reason.id}>
+                        {reason.label} (+{reason.points} pontos)
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+
+                  <SelectGroup>
+                    <SelectLabel>🍖 Confraternização</SelectLabel>
+                    {pointReasons.confraternizacao.map((reason) => (
+                      <SelectItem key={reason.id} value={reason.id}>
+                        {reason.label} (+{reason.points} pontos)
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+
+                  <SelectGroup>
+                    <SelectLabel>🤝 Companheirismo</SelectLabel>
+                    {pointReasons.companheirismo.map((reason) => (
+                      <SelectItem key={reason.id} value={reason.id}>
+                        {reason.label} (+{reason.points} pontos)
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+
+                  <SelectGroup>
+                    <SelectLabel>🧹 Organização</SelectLabel>
+                    {pointReasons.organizacao.map((reason) => (
+                      <SelectItem key={reason.id} value={reason.id}>
+                        {reason.label} (+{reason.points} pontos)
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+
+                  <SelectGroup>
+                    <SelectLabel>🎯 Engajamento</SelectLabel>
+                    {pointReasons.engajamento.map((reason) => (
+                      <SelectItem key={reason.id} value={reason.id}>
+                        {reason.label} (+{reason.points} pontos)
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+
+                  <SelectGroup>
+                    <SelectLabel>🏆 Eventos</SelectLabel>
+                    {pointReasons.eventos.map((reason) => (
+                      <SelectItem key={reason.id} value={reason.id}>
+                        {reason.label} (+{reason.points} pontos)
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+
+                  <SelectGroup>
+                    <SelectLabel>😤 Xingamentos</SelectLabel>
+                    {pointReasons.xingamentos.map((reason) => (
+                      <SelectItem key={reason.id} value={reason.id}>
+                        {reason.label} (+{reason.points} pontos)
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+
+                  <SelectGroup>
+                    <SelectLabel>😅 Situações</SelectLabel>
+                    {pointReasons.situacoes.map((reason) => (
+                      <SelectItem key={reason.id} value={reason.id}>
+                        {reason.label} (+{reason.points} pontos)
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+
+                  <SelectGroup>
+                    <SelectLabel>🎒 Dia a Dia</SelectLabel>
+                    {pointReasons.diaadia.map((reason) => (
+                      <SelectItem key={reason.id} value={reason.id}>
+                        {reason.label} (+{reason.points} pontos)
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+
+                  <SelectGroup>
+                    <SelectLabel>⚽ Esportes</SelectLabel>
+                    {pointReasons.esportes.map((reason) => (
+                      <SelectItem key={reason.id} value={reason.id}>
+                        {reason.label} (+{reason.points} pontos)
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+
+                  <SelectGroup>
+                    <SelectLabel>⭐ Especiais</SelectLabel>
+                    {pointReasons.especiais.map((reason) => (
+                      <SelectItem key={reason.id} value={reason.id}>
+                        {reason.label} (+{reason.points} pontos)
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
                 </SelectContent>
               </Select>
+              <p className="text-xs text-muted-foreground">
+                💡 As atividades estão organizadas por categoria. Deslize para ver todas as opções!
+              </p>
             </div>
+
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="for-other-user"
+                checked={forOtherUser}
+                onCheckedChange={setForOtherUser}
+              />
+              <label
+                htmlFor="for-other-user"
+                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 flex items-center gap-2"
+              >
+                <Users className="h-4 w-4" />
+                Registrar para outra pessoa
+              </label>
+            </div>
+
+            {forOtherUser && (
+              <div className="space-y-2">
+                <label>Usuário que receberá os pontos</label>
+                <Select
+                  value={selectedTargetUser}
+                  onValueChange={setSelectedTargetUser}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione o usuário..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {allUsers
+                      .filter(u => u.username && u.username !== user?.username) // Filtrar o próprio usuário e usuários inválidos
+                      .slice(0, 50) // Limitar para performance
+                      .length > 0 ? (
+                      allUsers
+                        .filter(u => u.username && u.username !== user?.username)
+                        .slice(0, 50)
+                        .map((targetUser) => (
+                          <SelectItem
+                            key={targetUser.username}
+                            value={targetUser.username}
+                          >
+                            <div className="flex items-center gap-2 w-full">
+                              <Avatar className="w-5 h-5 flex-shrink-0">
+                                <AvatarImage src={targetUser.avatar} />
+                                <AvatarFallback>
+                                  {targetUser.username?.charAt(0)?.toUpperCase()}
+                                </AvatarFallback>
+                              </Avatar>
+                              <span className="flex-1 truncate">{targetUser.username}</span>
+                              <Badge variant="outline" className="text-xs flex-shrink-0">
+                                {targetUser.points || 0}pts
+                              </Badge>
+                            </div>
+                          </SelectItem>
+                        ))
+                    ) : (
+                      <div className="p-2 text-center text-muted-foreground text-sm">
+                        Nenhum usuário disponível
+                      </div>
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
             <div className="text-sm text-muted-foreground">
               <p>Data e hora: {currentDateTime}</p>
-              <p>Usuário: {user?.username}</p>
+              <p>Registrado por: {user?.username}</p>
+              {forOtherUser && selectedTargetUser && (
+                <p className="text-primary">
+                  <Users className="inline h-3 w-3 mr-1" />
+                  Pontos para: <strong>{selectedTargetUser}</strong>
+                </p>
+              )}
             </div>
 
             <Button
               onClick={handleRegisterPoint}
               className="w-full"
-              disabled={isAddingPoint || !selectedReason}
+              disabled={isAddingPoint || !selectedReason || (forOtherUser && !selectedTargetUser)}
             >
               {isAddingPoint ? (
                 <>
@@ -697,8 +974,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 </>
               ) : (
                 <>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Registrar Ponto
+                  {forOtherUser ? <Users className="h-4 w-4 mr-2" /> : <Plus className="h-4 w-4 mr-2" />}
+                  {forOtherUser ? "Registrar para Usuário" : "Registrar Ponto"}
                 </>
               )}
             </Button>
@@ -808,9 +1085,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                         : "-"}
                     </TableCell>
                     <TableCell>
-                      {pointReasons.find(
-                        (r) => r.id === record?.reason,
-                      )?.label ||
+                      {findReasonById(record?.reason)?.label ||
                         record?.reason ||
                         "-"}
                     </TableCell>

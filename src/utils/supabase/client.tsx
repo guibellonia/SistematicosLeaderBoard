@@ -74,6 +74,17 @@ export class SystemAPI {
     return result
   }
 
+  // Adicionar ponto para outro usuário
+  static async addPointForUser(targetUsername: string, reason: string, points: number, reasonId?: string) {
+    console.log(`📤 Enviando ponto para outro usuário: ${targetUsername}, ${reason}, ${points}, reasonId: ${reasonId}`)
+    const result = await this.request('/points/add-for-user', {
+      method: 'POST',
+      body: JSON.stringify({ targetUsername, reason, points, reasonId }),
+    }, true) // Requer autenticação
+    console.log(`📥 Resposta do servidor:`, result)
+    return result
+  }
+
   // Leaderboard
   static async getLeaderboard() {
     return this.request('/leaderboard')
